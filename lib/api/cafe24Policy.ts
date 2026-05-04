@@ -75,8 +75,10 @@ export async function putCafe24Policy(
     privacy_all: request.privacy_all ?? "",
     terms_using_mall: request.terms_using_mall ?? "",
     use_privacy_join: request.use_privacy_join,
-    privacy_join: request.privacy_join ?? "",
   };
+  if (request.use_privacy_join === "T") {
+    requestPayload.privacy_join = request.privacy_join ?? "";
+  }
   if (request.use_withdrawal === "T") {
     requestPayload.use_withdrawal = "T";
     requestPayload.required_withdrawal = request.required_withdrawal;

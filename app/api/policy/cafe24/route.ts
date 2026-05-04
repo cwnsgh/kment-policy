@@ -154,6 +154,20 @@ export async function PUT(req: NextRequest) {
     }
 
     const requestBody = mergeLiveWithResolvedBodies(live, resolved);
+    if (
+      requestBody.use_privacy_join === "T" &&
+      !(requestBody.privacy_join ?? "").trim()
+    ) {
+      return NextResponse.json(
+        {
+          error: "privacy_join_empty",
+          step: "validate_before_put",
+          hint:
+            "save_type C(사용자 정의)일 때 회원가입 개인정보처리방침(use_privacy_join=T) 본문이 비어 있으면 카페24가 거부합니다. 카페24 관리자에서 해당 항목에 내용을 입력한 뒤 다시 저장하세요.",
+        },
+        { status: 400 }
+      );
+    }
     logger.info("admin/policy PUT 시도", {
       mall_id,
       shop_no,
@@ -184,7 +198,7 @@ export async function PUT(req: NextRequest) {
                 : result.status === 400
                   ? "요청 본문 검증 실패일 수 있습니다. 카페24 에러 메시지(cafe24)를 확인하세요."
                   : result.status === 422
-                    ? "플래그·HTML 조합 검증 실패. 서버 로그에 PUT 직전 플래그·본문 길이가 남습니다. 카페24 관리자에서 청약철회/가입 개인정보 사용 여부와 맞는지 확인하세요."
+                    ? "플래그·HTML·save_type C 조합 검증 실패입니다. 메시지에 privacy_join/withdrawal 등이 나오면 관리자에서 해당 본문을 채우거나, 가입 개인정보·철회 사용 여부와 본문이 맞는지 확인하세요."
                     : "카페24 admin/policy PUT 응답을 확인하세요.",
         },
         { status: 502 }
