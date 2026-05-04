@@ -22,7 +22,7 @@ export default async function DashboardPage({
           </p>
         </div>
       ) : (
-        <PolicyWorkspace mallId={mallId} />
+        <PolicyWorkspace key={mallId} mallId={mallId} />
       )}
     </div>
   );

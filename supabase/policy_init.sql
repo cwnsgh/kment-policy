@@ -40,6 +40,8 @@ alter table policy.oauth_states enable row level security;
 alter table policy.shops enable row level security;
 
 -- 클라이언트 getShopByMallId(anon)용 — 운영 시 mall 단위로 좁히는 것을 권장
+-- (스크립트 재실행 시 42710 방지: 기존 정책이 있으면 제거 후 다시 생성)
+drop policy if exists "shops_select_anon" on policy.shops;
 create policy "shops_select_anon"
   on policy.shops
   for select

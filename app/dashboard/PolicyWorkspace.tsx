@@ -14,8 +14,22 @@ import {
   type PolicySlot,
   type VariantRevisionRow,
 } from "@/types/policyPreset";
+import type { Cafe24PolicyPayload } from "@/lib/api/cafe24Policy";
 import { PolicyRichEditor } from "./PolicyRichEditor";
 import styles from "./PolicyWorkspace.module.css";
+
+function slotBodyFromLive(p: Cafe24PolicyPayload, slot: PolicySlot): string {
+  const v = p[slot as keyof Cafe24PolicyPayload];
+  return typeof v === "string" ? v : "";
+}
+
+function isDbSetupError(text: string) {
+  return (
+    /schema cache|policy_text_variants|policy_variant_revisions|PGRST106|PGRST205/i.test(
+      text
+    ) || text.includes("Could not find the table")
+  );
+}
 
 type VariantRow = {
   id: string;
@@ -74,13 +88,14 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     null
   );
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [livePolicy, setLivePolicy] = useState<Cafe24PolicyPayload | null>(null);
 
   const q = useMemo(
     () => `mall_id=${encodeURIComponent(mallId)}`,
     [mallId]
   );
 
-  const loadVariants = useCallback(async () => {
+  const loadVariants = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     setMsg(null);
     try {
@@ -103,15 +118,50 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
         }
       }
       setBySlot(next);
+      return true;
     } catch (e) {
       setMsg({
         type: "err",
         text: e instanceof Error ? e.message : "목록 로드 실패",
       });
+      return false;
     } finally {
       setLoading(false);
     }
   }, [mallId]);
+
+  const loadLiveFromCafe24 = useCallback(async () => {
+    setLoading(true);
+    setMsg(null);
+    try {
+      const p = new URLSearchParams({
+        mall_id: mallId,
+        shop_no: String(shopNo),
+      });
+      const res = await fetch(`/api/policy/cafe24?${p}`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (!data.policy) throw new Error("응답에 policy가 없습니다.");
+      setLivePolicy(data.policy as Cafe24PolicyPayload);
+      setMsg({
+        type: "ok",
+        text: "카페24에 지금 올라가 있는 약관을 불러왔습니다. (GET)",
+      });
+    } catch (e) {
+      setLivePolicy(null);
+      setMsg({
+        type: "err",
+        text:
+          e instanceof Error
+            ? e.message
+            : "카페24 약관을 불러오지 못했습니다.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [mallId, shopNo]);
 
   const loadRevisions = useCallback(async () => {
     setHistoryLoading(true);
@@ -361,13 +411,50 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       </aside>
 
       <div className={styles.main}>
-        <h2 className={styles.heading}>슬롯별 저장본 · {mallId}</h2>
+        <h2 className={styles.heading}>약관 · {mallId}</h2>
+
+        <section className={styles.stepsPanel} aria-label="사용 순서">
+          <p className={styles.stepsLead}>
+            처음엔 <strong>불러오기</strong>만 눌러 확인하면 됩니다.
+          </p>
+          <ol className={styles.stepsList}>
+            <li>
+              <strong>카페24 현재 약관 불러오기</strong> — 지금 쇼핑몰에 게시된 HTML
+              (GET, 읽기 전용)
+            </li>
+            <li>
+              <strong>저장된 목록 불러오기</strong> — 이 앱 DB에 만든 초안·버전
+              (GET)
+            </li>
+            <li>
+              아래에서 슬롯별로 수정·추가한 뒤, 왼쪽에서 조합하고{" "}
+              <strong>카페24에 반영</strong> (PUT)
+            </li>
+          </ol>
+          <div className={styles.stepActions}>
+            <button
+              type="button"
+              className={styles.btnPrimary}
+              onClick={() => void loadLiveFromCafe24()}
+              disabled={loading}
+            >
+              카페24 현재 약관 불러오기 (GET)
+            </button>
+            <button
+              type="button"
+              className={styles.btnSecondary}
+              onClick={() => void loadVariants()}
+              disabled={loading}
+            >
+              저장된 목록 불러오기 (DB)
+            </button>
+          </div>
+        </section>
+
         <p className={styles.hint}>
-          각 항목은 <strong>별도의 목록·별도의 번(라벨)</strong>으로 저장합니다.
-          위 사이드바에서 섞어서 한 번에 PUT 하면 됩니다. 본문은 에디터에서 작성한
-          그대로 <strong>HTML</strong>로 저장됩니다. (예:{" "}
-          <code>&lt;p&gt;1. …&lt;/p&gt;</code>, 굵게·글자 크기는{" "}
-          <code>&lt;strong&gt;</code>, 인라인 <code>font-size</code> 등)
+          DB 저장본은 슬롯마다 여러 <strong>라벨(1번, 2번…)</strong>로 둘 수 있고,
+          왼쪽에서 섞어서 한 번에 PUT 합니다. 본문은 에디터 기준{" "}
+          <strong>HTML</strong>로 저장됩니다.
         </p>
 
         {msg && (
@@ -376,21 +463,63 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
           </p>
         )}
 
-        <div className={styles.toolbar}>
-          <button
-            type="button"
-            className={styles.btnSecondary}
-            onClick={() => void loadVariants()}
-            disabled={loading}
-          >
-            전체 새로고침
-          </button>
-        </div>
+        {msg?.type === "err" && isDbSetupError(msg.text) ? (
+          <div className={styles.setupCallout} role="note">
+            <strong>DB / Supabase 설정이 필요할 때 나는 메시지입니다.</strong>
+            <ul className={styles.setupList}>
+              <li>
+                Supabase SQL Editor에서{" "}
+                <code className={styles.codeInline}>supabase/policy_init.sql</code>{" "}
+                전체 실행 (테이블 생성)
+              </li>
+              <li>
+                <code className={styles.codeInline}>
+                  supabase/policy_variant_revisions.sql
+                </code>{" "}
+                실행 (히스토리 테이블)
+              </li>
+              <li>
+                Supabase <strong>Project Settings → Data API → Exposed schemas</strong>
+                에 <code className={styles.codeInline}>policy</code> 추가
+              </li>
+              <li>저장 후 이 페이지에서 「저장된 목록 불러오기」 다시 시도</li>
+            </ul>
+          </div>
+        ) : null}
 
-        <section className={styles.historySection} aria-labelledby="history-heading">
-          <h3 id="history-heading" className={styles.historyTitle}>
-            변경 히스토리
-          </h3>
+        {livePolicy ? (
+          <section
+            className={styles.livePanel}
+            aria-label="카페24에 반영 중인 약관 미리보기"
+          >
+            <h3 className={styles.liveTitle}>
+              지금 쇼핑몰에 올라가 있는 약관 (읽기 전용)
+            </h3>
+            <p className={styles.meta}>
+              shop_no {livePolicy.shop_no} · 가입/철회 플래그: 가입개인정보{" "}
+              {livePolicy.use_privacy_join} / 철회 {livePolicy.use_withdrawal} (
+              필수 {livePolicy.required_withdrawal})
+            </p>
+            {POLICY_SLOTS.map((slot) => (
+              <details key={slot} className={styles.liveSlot}>
+                <summary className={styles.liveSummary}>
+                  {SLOT_LABELS[slot]}
+                </summary>
+                <div
+                  className={styles.htmlPreview}
+                  dangerouslySetInnerHTML={{
+                    __html: slotBodyFromLive(livePolicy, slot) || "<p>(비어 있음)</p>",
+                  }}
+                />
+              </details>
+            ))}
+          </section>
+        ) : null}
+
+        <details className={styles.historyDetails}>
+          <summary className={styles.historySummary}>변경 히스토리 (펼치기)</summary>
+          <div className={styles.historyDetailsBody}>
+        <section className={styles.historySection}>
           <p className={styles.historyHint}>
             슬롯별 저장본이 <strong>추가·수정·삭제</strong>될 때마다 기록됩니다.
             &quot;수정 직전&quot;은 바뀌기 <strong>이전</strong> 내용입니다.
@@ -488,6 +617,8 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
             </div>
           )}
         </section>
+          </div>
+        </details>
 
         {edit && (
           <div className={styles.editBox}>
