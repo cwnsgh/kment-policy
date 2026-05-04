@@ -1,0 +1,70 @@
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin, POLICY_SCHEMA } from "@/lib/db";
+import { requireMallSession } from "@/lib/api/routeAuth";
+import { POLICY_SLOTS, type PolicySlot } from "@/types/policyPreset";
+
+function table() {
+  return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_text_variants");
+}
+
+function isSlot(s: string): s is PolicySlot {
+  return (POLICY_SLOTS as readonly string[]).includes(s);
+}
+
+/** 슬롯별 저장된 '번' 목록 (slot 필터 선택) */
+export async function GET(req: NextRequest) {
+  const mall_id = req.nextUrl.searchParams.get("mall_id");
+  const slot = req.nextUrl.searchParams.get("slot");
+  const auth = await requireMallSession(req, mall_id);
+  if (auth) return auth;
+
+  let q = table().select("*").eq("mall_id", mall_id!).order("updated_at", {
+    ascending: false,
+  });
+  if (slot) {
+    if (!isSlot(slot)) {
+      return NextResponse.json({ error: "invalid slot" }, { status: 400 });
+    }
+    q = q.eq("slot", slot);
+  }
+
+  const { data, error } = await q;
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ variants: data ?? [] });
+}
+
+/** 수동으로 한 슬롯·한 라벨 본문 저장 */
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const mall_id = body.mall_id as string | undefined;
+    const auth = await requireMallSession(req, mall_id ?? null);
+    if (auth) return auth;
+
+    const slot = body.slot as string;
+    if (!isSlot(slot)) {
+      return NextResponse.json({ error: "invalid slot" }, { status: 400 });
+    }
+
+    const label = String(body.label ?? "").trim() || "1번";
+    const row = {
+      mall_id: mall_id!,
+      slot,
+      label,
+      body: String(body.body ?? ""),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await table().insert(row).select("*").single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ variant: data });
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+}

@@ -17,7 +17,7 @@ const getJwtSecret = () => {
   return new TextEncoder().encode(secret);
 };
 
-const COOKIE_NAME = "kment_policy_session";
+export const COOKIE_NAME = "kment_policy_session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 
 export interface SessionData {
