@@ -11,6 +11,7 @@ import {
   MANAGED_POLICY_SLOT,
   REVISION_ACTION_LABELS,
   SLOT_LABELS,
+  type PolicyPutSnapshotRow,
   type VariantRevisionRow,
 } from "@/types/policyPreset";
 import type { Cafe24PolicyPayload } from "@/lib/api/cafe24Policy";
@@ -44,7 +45,7 @@ function slotBodyFromLive(p: Cafe24PolicyPayload): string {
 
 function isDbSetupError(text: string) {
   return (
-    /schema cache|policy_text_variants|policy_variant_revisions|PGRST106|PGRST205/i.test(
+    /schema cache|policy_text_variants|policy_variant_revisions|policy_put_snapshots|PGRST106|PGRST205/i.test(
       text
     ) || text.includes("Could not find the table")
   );
@@ -116,6 +117,11 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   );
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [livePolicy, setLivePolicy] = useState<Cafe24PolicyPayload | null>(null);
+  const [termsDraft, setTermsDraft] = useState("");
+  const [putSnapshots, setPutSnapshots] = useState<PolicyPutSnapshotRow[]>([]);
+  const [putHistoryLoading, setPutHistoryLoading] = useState(false);
+  const [putHistoryError, setPutHistoryError] = useState<string | null>(null);
+  const [expandedPutId, setExpandedPutId] = useState<string | null>(null);
 
   const q = useMemo(
     () => `mall_id=${encodeURIComponent(mallId)}`,
@@ -169,6 +175,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       if (!data.policy) throw new Error("응답에 policy가 없습니다.");
       const policy = data.policy as Cafe24PolicyPayload;
       setLivePolicy(policy);
+      setTermsDraft(slotBodyFromLive(policy));
       console.log(
         `%c${LOG_PREFIX} Cafe24 GET — 원본 policy 객체 (아래 펼쳐서 확인)`,
         "color:#1d4ed8;font-weight:bold",
@@ -217,6 +224,27 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     }
   }, [mallId]);
 
+  const loadPutSnapshots = useCallback(async () => {
+    setPutHistoryLoading(true);
+    setPutHistoryError(null);
+    try {
+      const p = new URLSearchParams({ mall_id: mallId, limit: "100" });
+      const res = await fetch(`/api/policy/put-snapshots?${p}`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setPutSnapshots((data.snapshots || []) as PolicyPutSnapshotRow[]);
+    } catch (e) {
+      setPutSnapshots([]);
+      setPutHistoryError(
+        e instanceof Error ? e.message : "반영 기록을 불러오지 못했습니다."
+      );
+    } finally {
+      setPutHistoryLoading(false);
+    }
+  }, [mallId]);
+
   useEffect(() => {
     void loadVariants();
   }, [loadVariants]);
@@ -224,6 +252,10 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   useEffect(() => {
     void loadRevisions();
   }, [loadRevisions]);
+
+  useEffect(() => {
+    void loadPutSnapshots();
+  }, [loadPutSnapshots]);
 
   const addVariant = async () => {
     const label = newRow.label.trim() || "1번";
@@ -335,7 +367,12 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
+      const savedId = edit.id;
+      const savedBody = edit.body;
       setEdit(null);
+      if (pickTermsId === savedId) {
+        setTermsDraft(savedBody);
+      }
       setMsg({ type: "ok", text: "수정했습니다." });
       await loadVariants();
       void loadRevisions();
@@ -349,10 +386,56 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     }
   };
 
+  const quickSaveDraftToDb = async () => {
+    if (!termsDraft.trim()) {
+      setMsg({
+        type: "err",
+        text: "편집기에 저장할 이용약관 내용이 없습니다.",
+      });
+      return;
+    }
+    const label = prompt(`${SLOT_LABELS[MANAGED_POLICY_SLOT]} — 저장본 라벨`, "편집기 저장");
+    if (label === null) return;
+    setLoading(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/policy/variants", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mall_id: mallId,
+          slot: MANAGED_POLICY_SLOT,
+          label: label.trim() || "1번",
+          body: termsDraft,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setMsg({ type: "ok", text: "편집기 내용을 저장본(DB)에 추가했습니다." });
+      await loadVariants();
+      void loadRevisions();
+    } catch (e) {
+      setMsg({
+        type: "err",
+        text: e instanceof Error ? e.message : "저장 실패",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const applyCafe24 = async () => {
+    if (!termsDraft.trim()) {
+      setMsg({
+        type: "err",
+        text: "이용약관 본문이 비어 있습니다. 카페24에서 불러오거나 저장본을 선택해 편집기에 불러오세요.",
+      });
+      return;
+    }
     if (
       !confirm(
-        "선택한 이용약관 variant를 카페24에 반영합니다. (선택 없음 = 지금 쇼핑몰 이용약관 유지) 개인정보·가입약관·철회는 건드리지 않습니다."
+        "아래 편집기에 있는 이용약관 HTML을 카페24에 반영합니다. (저장본을 고르면 기록에만 참고 라벨이 남습니다.) 개인정보·가입약관·철회는 건드리지 않습니다."
       )
     ) {
       return;
@@ -363,6 +446,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       const putBody = {
         mall_id: mallId,
         shop_no: shopNo,
+        terms_using_mall_html: termsDraft,
         picks: {
           terms_using_mall: pickTermsId || undefined,
         },
@@ -392,7 +476,16 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
         "color:#047857;font-weight:bold",
         data.policy
       );
-      setMsg({ type: "ok", text: "카페24에 이용약관을 반영했습니다. (콘솔에 응답 policy 출력됨)" });
+      if (data.policy) {
+        const policy = data.policy as Cafe24PolicyPayload;
+        setLivePolicy(policy);
+        setTermsDraft(slotBodyFromLive(policy));
+      }
+      void loadPutSnapshots();
+      setMsg({
+        type: "ok",
+        text: "카페24에 이용약관을 반영했습니다. 반영 기록에 스냅샷이 남습니다.",
+      });
     } catch (e) {
       setMsg({
         type: "err",
@@ -408,8 +501,8 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       <aside className={styles.sidebar}>
         <p className={styles.sidebarTitle}>카페24 반영</p>
         <p className={styles.meta}>
-          {SLOT_LABELS[MANAGED_POLICY_SLOT]}만 바꿉니다. 나머지 약관은 쇼핑몰
-          설정 그대로 둡니다.
+          반영되는 본문은 <strong>가운데 편집기</strong> 내용입니다. 저장본을
+          고르면 편집기에 불러오며, PUT 기록에 참고용 라벨만 남습니다.
         </p>
         <div className={styles.field}>
           <label className={styles.label}>shop_no</label>
@@ -423,14 +516,21 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
         </div>
         <div className={styles.field}>
           <label className={styles.label}>
-            {SLOT_LABELS[MANAGED_POLICY_SLOT]}
+            저장본 불러오기 (편집기로)
           </label>
           <select
             className={styles.select}
             value={pickTermsId}
-            onChange={(e) => setPickTermsId(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPickTermsId(v);
+              if (v) {
+                const row = termsVariants.find((t) => t.id === v);
+                if (row) setTermsDraft(row.body);
+              }
+            }}
           >
-            <option value="">현재 쇼핑몰 유지 (GET)</option>
+            <option value="">선택 안 함</option>
             {termsVariants.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.label}
@@ -444,7 +544,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
           onClick={() => void applyCafe24()}
           disabled={loading}
         >
-          이용약관만 카페24에 PUT
+          편집기 내용 → 카페24 PUT
         </button>
       </aside>
 
@@ -453,23 +553,10 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
           {SLOT_LABELS[MANAGED_POLICY_SLOT]} · {mallId}
         </h2>
 
-        <section className={styles.stepsPanel} aria-label="사용 순서">
+        <section className={styles.stepsPanel} aria-label="빠른 안내">
           <p className={styles.stepsLead}>
-            이 화면은 <strong>쇼핑몰 이용약관</strong>만 다룹니다.
+            <strong>쇼핑몰 이용약관</strong>만 — 카페24 GET → 바로 편집 → PUT
           </p>
-          <ol className={styles.stepsList}>
-            <li>
-              <strong>카페24에서 불러오기</strong> — 지금 게시 중인 이용약관
-              HTML (GET)
-            </li>
-            <li>
-              <strong>저장된 목록 불러오기</strong> — 이 앱 DB에 만든 버전
-            </li>
-            <li>
-              아래에서 수정·추가 후, 왼쪽에서 variant 선택 →{" "}
-              <strong>PUT</strong>
-            </li>
-          </ol>
           <div className={styles.stepActions}>
             <button
               type="button"
@@ -477,7 +564,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
               onClick={() => void loadLiveFromCafe24()}
               disabled={loading}
             >
-              카페24 현재 이용약관 (GET)
+              카페24에서 불러오기
             </button>
             <button
               type="button"
@@ -485,16 +572,48 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
               onClick={() => void loadVariants()}
               disabled={loading}
             >
-              저장된 목록 (DB)
+              저장본 목록 새로고침
             </button>
           </div>
         </section>
 
         <p className={styles.hint}>
-          개인정보처리방침·회원가입 개인정보·청약철회는{" "}
-          <strong>카페24 관리자에서 그대로</strong> 두고, 여기서는{" "}
-          <strong>이용약관 HTML</strong>만 저장·히스토리·반영합니다.
+          개인정보·가입 개인정보·철회는 카페24 관리자 그대로 두고, 여기서는{" "}
+          <strong>이용약관 HTML</strong>만 다룹니다.
         </p>
+
+        <section className={styles.editorPanel} aria-label="이용약관 편집">
+          <div className={styles.editorPanelHead}>
+            <h3 className={styles.editorPanelTitle}>
+              {SLOT_LABELS[MANAGED_POLICY_SLOT]} — 바로 편집
+            </h3>
+            {livePolicy ? (
+              <span className={styles.editorBadge}>
+                shop_no {livePolicy.shop_no} · 카페24에서 불러온 뒤 수정 가능
+              </span>
+            ) : (
+              <span className={styles.editorBadgeMuted}>
+                먼저 「카페24에서 불러오기」 또는 왼쪽 저장본을 선택하세요
+              </span>
+            )}
+          </div>
+          <PolicyRichEditor
+            html={termsDraft}
+            onChange={setTermsDraft}
+            placeholder="여기에서 문단·굵기·목록·링크를 편집합니다. 카페24 GET 후 바로 고칠 수 있습니다."
+            disabled={loading}
+          />
+          <div className={styles.editorToolbar}>
+            <button
+              type="button"
+              className={styles.btnSecondary}
+              onClick={() => void quickSaveDraftToDb()}
+              disabled={loading}
+            >
+              편집기 내용 → 저장본(DB)에 추가
+            </button>
+          </div>
+        </section>
 
         {msg && (
           <p className={msg.type === "ok" ? styles.msgOk : styles.msgErr}>
@@ -515,7 +634,13 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
                 <code className={styles.codeInline}>
                   supabase/policy_variant_revisions.sql
                 </code>{" "}
-                실행 (히스토리 테이블)
+                실행 (저장본 변경 기록)
+              </li>
+              <li>
+                <code className={styles.codeInline}>
+                  supabase/policy_put_snapshots.sql
+                </code>{" "}
+                실행 (카페24 PUT 반영 스냅샷)
               </li>
               <li>
                 Supabase <strong>Project Settings → Data API → Exposed schemas</strong>
@@ -526,34 +651,107 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
           </div>
         ) : null}
 
-        {livePolicy ? (
-          <section
-            className={styles.livePanel}
-            aria-label="카페24 이용약관 미리보기"
-          >
-            <h3 className={styles.liveTitle}>
-              지금 쇼핑몰의 {SLOT_LABELS[MANAGED_POLICY_SLOT]} (읽기 전용)
-            </h3>
-            <p className={styles.meta}>shop_no {livePolicy.shop_no}</p>
-            <div
-              className={styles.htmlPreview}
-              dangerouslySetInnerHTML={{
-                __html: slotBodyFromLive(livePolicy) || "<p>(비어 있음)</p>",
-              }}
-            />
-          </section>
-        ) : null}
+        <details className={styles.putHistoryDetails} open>
+          <summary className={styles.putHistorySummary}>
+            카페24 반영 기록 (PUT할 때마다)
+          </summary>
+          <div className={styles.putHistoryBody}>
+            <p className={styles.historyHint}>
+              카페24에 <strong>이용약관 PUT이 성공</strong>할 때마다, 그때
+              반영된 HTML이 여기에 남습니다. (저장본을 고쳤다가 PUT한 것과
+              별개로, &quot;실제로 몰에 올라간 내용&quot; 기준입니다.)
+            </p>
+            {putHistoryError ? (
+              <p className={styles.msgErr}>{putHistoryError}</p>
+            ) : null}
+            <div className={styles.historyToolbar}>
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                onClick={() => void loadPutSnapshots()}
+                disabled={putHistoryLoading}
+              >
+                새로고침
+              </button>
+            </div>
+            {putHistoryLoading && putSnapshots.length === 0 ? (
+              <p className={styles.meta}>불러오는 중…</p>
+            ) : putSnapshots.length === 0 ? (
+              <p className={styles.meta}>아직 반영 기록이 없습니다.</p>
+            ) : (
+              <div className={styles.historyTableWrap}>
+                <table className={styles.historyTable}>
+                  <thead>
+                    <tr>
+                      <th>시각</th>
+                      <th>shop</th>
+                      <th>참고 저장본</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {putSnapshots.map((s) => (
+                      <Fragment key={s.id}>
+                        <tr>
+                          <td className={styles.historyCellTime}>
+                            {new Date(s.created_at).toLocaleString("ko-KR")}
+                          </td>
+                          <td>{s.shop_no}</td>
+                          <td className={styles.historyCellLabel}>
+                            {s.variant_label ?? "—"}
+                            {s.variant_id ? (
+                              <span className={styles.meta}>
+                                {" "}
+                                ({s.variant_id.slice(0, 8)}…)
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className={styles.btnSecondary}
+                              onClick={() =>
+                                setExpandedPutId((cur) =>
+                                  cur === s.id ? null : s.id
+                                )
+                              }
+                            >
+                              {expandedPutId === s.id ? "접기" : "본문"}
+                            </button>
+                          </td>
+                        </tr>
+                        {expandedPutId === s.id ? (
+                          <tr className={styles.historyBodyRow}>
+                            <td colSpan={4}>
+                              <div
+                                className={styles.htmlPreviewLg}
+                                dangerouslySetInnerHTML={{
+                                  __html: s.terms_body || "<p>(비어 있음)</p>",
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </details>
 
         <details className={styles.historyDetails}>
           <summary className={styles.historySummary}>
-            이용약관 변경 히스토리 (펼치기)
+            저장본(DB) 변경 기록 — 추가·수정·삭제
           </summary>
           <div className={styles.historyDetailsBody}>
             <section className={styles.historySection}>
               <p className={styles.historyHint}>
-                이용약관 저장본이 <strong>추가·수정·삭제</strong>될 때마다
-                기록됩니다. &quot;수정 직전&quot;은 바뀌기{" "}
-                <strong>이전</strong> 내용입니다.
+                이 앱 DB에 있는 <strong>저장본(variant)</strong>이 바뀔 때의
+                기록입니다. &quot;수정 직전&quot;은 저장하기{" "}
+                <strong>이전</strong> 스냅샷입니다. (위의「카페24 반영 기록」과
+                용도가 다릅니다.)
               </p>
               {historyError ? (
                 <p className={styles.msgErr}>{historyError}</p>
@@ -565,7 +763,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
                   onClick={() => void loadRevisions()}
                   disabled={historyLoading}
                 >
-                  히스토리 새로고침
+                  새로고침
                 </button>
               </div>
               {historyLoading && revisions.length === 0 ? (
@@ -696,6 +894,13 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
                   <button
                     type="button"
                     className={styles.btnSecondary}
+                    onClick={() => setTermsDraft(v.body)}
+                  >
+                    편집기로
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.btnSecondary}
                     onClick={() =>
                       setEdit({
                         id: v.id,
@@ -704,7 +909,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
                       })
                     }
                   >
-                    편집
+                    라벨·본문 수정
                   </button>
                   <button
                     type="button"

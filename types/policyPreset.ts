@@ -66,3 +66,14 @@ export const REVISION_ACTION_LABELS: Record<VariantRevisionAction, string> = {
   update: "수정 직전",
   delete: "삭제 직전",
 };
+
+/** 카페24 PUT 성공 시 저장되는 반영 이력 (저장본 CRUD와 별개) */
+export interface PolicyPutSnapshotRow {
+  id: string;
+  mall_id: string;
+  shop_no: number;
+  variant_id: string | null;
+  variant_label: string | null;
+  terms_body: string;
+  created_at: string;
+}

@@ -51,15 +51,15 @@
 }
 
 .shell {
-  min-height: 200px;
+  min-height: 280px;
 }
 
 .shell:empty {
-  min-height: 200px;
+  min-height: 280px;
 }
 
 .proseMirror {
-  min-height: 180px;
+  min-height: 240px;
   padding: 0.625rem 0.75rem;
   font-size: 0.9rem;
   line-height: 1.6;

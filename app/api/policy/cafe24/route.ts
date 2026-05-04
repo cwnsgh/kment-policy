@@ -35,6 +35,10 @@ function variantsTable() {
   return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_text_variants");
 }
 
+function putSnapshotsTable() {
+  return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_put_snapshots");
+}
+
 /** 카페24 현재 약관 전체 */
 export async function GET(req: NextRequest) {
   const mall_id = req.nextUrl.searchParams.get("mall_id");
@@ -74,8 +78,9 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * picks: 쇼핑몰 이용약관(terms_using_mall)만 variant id 가능, 나머지 슬롯은 항상 카페24 GET 유지
- * → GET → 조합 → PUT 한 번
+ * 이용약관 본문: `terms_using_mall_html`(문자열)이 있으면 그대로 PUT에 사용합니다.
+ * 없으면 `picks.terms_using_mall`(variant id) 또는 카페24 GET 현재값을 사용합니다.
+ * 나머지 슬롯은 항상 GET 현재값 유지 → GET → 조합 → PUT 한 번.
  */
 export async function PUT(req: NextRequest) {
   try {
@@ -120,8 +125,26 @@ export async function PUT(req: NextRequest) {
     }
     const live = liveRes.policy;
 
-    const ids = POLICY_SLOTS.map((s) => picks[s])
-      .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    const useInlineTerms = typeof body.terms_using_mall_html === "string";
+    if (useInlineTerms && !String(body.terms_using_mall_html).trim()) {
+      return NextResponse.json(
+        {
+          error: "terms_using_mall_empty",
+          step: "validate_before_put",
+          hint:
+            "이용약관 본문이 비어 있으면 카페24에 반영할 수 없습니다. 카페24에서 불러오거나 저장본을 선택·작성한 뒤 다시 시도하세요.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const ids = POLICY_SLOTS.flatMap((s) => {
+      if (s === MANAGED_POLICY_SLOT && useInlineTerms) return [];
+      const pick = picks[s];
+      return typeof pick === "string" && pick.trim().length > 0
+        ? [pick.trim()]
+        : [];
+    });
 
     let rows: { id: string; slot: string; body: string }[] = [];
     if (ids.length) {
@@ -138,6 +161,10 @@ export async function PUT(req: NextRequest) {
 
     const resolved = {} as Record<PolicySlot, string>;
     for (const slot of POLICY_SLOTS) {
+      if (slot === MANAGED_POLICY_SLOT && useInlineTerms) {
+        resolved[slot] = String(body.terms_using_mall_html);
+        continue;
+      }
       const pick = picks[slot];
       if (typeof pick === "string" && pick.trim()) {
         const row = rows.find((r) => r.id === pick && r.slot === slot);
@@ -203,6 +230,35 @@ export async function PUT(req: NextRequest) {
         },
         { status: 502 }
       );
+    }
+
+    const pickVid = picks[MANAGED_POLICY_SLOT];
+    let variantLabel: string | null = null;
+    if (typeof pickVid === "string" && pickVid.trim()) {
+      const { data: vrow, error: labelErr } = await variantsTable()
+        .select("label")
+        .eq("mall_id", mall_id!)
+        .eq("id", pickVid.trim())
+        .maybeSingle();
+      if (!labelErr && vrow && typeof (vrow as { label?: string }).label === "string") {
+        variantLabel = (vrow as { label: string }).label;
+      }
+    }
+
+    const { error: snapErr } = await putSnapshotsTable().insert({
+      mall_id: mall_id!,
+      shop_no,
+      variant_id:
+        typeof pickVid === "string" && pickVid.trim() ? pickVid.trim() : null,
+      variant_label: variantLabel,
+      terms_body: requestBody.terms_using_mall ?? "",
+    });
+    if (snapErr) {
+      logger.warn("policy_put_snapshots insert 실패 (PUT은 성공)", {
+        mall_id,
+        shop_no,
+        message: snapErr.message,
+      });
     }
 
     return NextResponse.json({ policy: result.policy });

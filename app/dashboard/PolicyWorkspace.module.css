@@ -553,3 +553,94 @@
   border: none;
   background: transparent;
 }
+
+.editorPanel {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 0.5rem;
+  background: #fafbff;
+}
+
+.editorPanelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.editorPanelTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.editorBadge {
+  font-size: 0.78rem;
+  color: #166534;
+  background: #ecfdf5;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+}
+
+.editorBadgeMuted {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.editorToolbar {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.putHistoryDetails {
+  margin-bottom: 1.25rem;
+  border: 1px solid #a5b4fc;
+  border-radius: 0.5rem;
+  background: #eef2ff;
+  padding: 0.25rem 0.75rem;
+}
+
+.putHistorySummary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #312e81;
+  padding: 0.35rem 0;
+}
+
+.putHistoryBody {
+  padding-bottom: 0.5rem;
+}
+
+.putHistoryDetails .historyHint {
+  margin-top: 0.25rem;
+}
+
+.htmlPreviewLg {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #374151;
+  max-height: min(70vh, 28rem);
+  overflow: auto;
+  padding: 0.625rem;
+  background: #fff;
+  border-radius: 0.25rem;
+  border: 1px solid #e5e7eb;
+}
+
+.htmlPreviewLg :global(p) {
+  margin: 0.25em 0;
+}
+
+.htmlPreviewLg :global(ul),
+.htmlPreviewLg :global(ol) {
+  margin: 0.25em 0;
+  padding-left: 1.1rem;
+}
