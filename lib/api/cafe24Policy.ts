@@ -64,17 +64,28 @@ export async function putCafe24Policy(
   request: PolicyRequestBody
 ): Promise<PutCafe24PolicyResult> {
   const url = `https://${mallId}.cafe24api.com/api/v2/admin/policy`;
+  /**
+   * 철회 미사용(F)인데 required_withdrawal/withdrawal까지내면
+   * "Cancellation Policy…" 422가 나는 몰이 있어, 철회 OFF일 땐 해당 키를 생략.
+   * (문서 예시는 전 필드지만, 실제 API는 부분 생략을 허용하는 경우가 있음)
+   */
+  const requestPayload: Record<string, string> = {
+    privacy_all: request.privacy_all ?? "",
+    terms_using_mall: request.terms_using_mall ?? "",
+    use_privacy_join: request.use_privacy_join,
+    privacy_join: request.privacy_join ?? "",
+  };
+  if (request.use_withdrawal === "T") {
+    requestPayload.use_withdrawal = "T";
+    requestPayload.required_withdrawal = request.required_withdrawal;
+    requestPayload.withdrawal = request.withdrawal ?? "";
+  } else {
+    requestPayload.use_withdrawal = "F";
+  }
+
   const payload = {
     shop_no: shopNo,
-    request: {
-      privacy_all: request.privacy_all ?? "",
-      terms_using_mall: request.terms_using_mall ?? "",
-      use_privacy_join: request.use_privacy_join,
-      privacy_join: request.privacy_join ?? "",
-      use_withdrawal: request.use_withdrawal,
-      required_withdrawal: request.required_withdrawal,
-      withdrawal: request.withdrawal ?? "",
-    },
+    request: requestPayload,
   };
 
   const res = await fetch(url, {

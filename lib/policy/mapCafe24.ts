@@ -2,12 +2,23 @@ import type { Cafe24PolicyPayload } from "@/lib/api/cafe24Policy";
 import type { PolicyRequestBody, PolicySlot } from "@/types/policyPreset";
 
 /**
- * 카페24 policy 플래그: 값이 비어 있거나 알 수 없으면 예전처럼 기본 T로 두면
- * 철회/동의 조합 422가 나기 쉬움 → 문자열이 정확히 "T"일 때만 T.
+ * 카페24 policy 플래그. API가 "T"/"F" 외 값을 줄 수 있어 true/false 계열만 넓게 인식.
  */
 export function normalizePolicyBooleanStrict(v: unknown): "T" | "F" {
   const s = String(v ?? "").trim().toUpperCase();
-  return s === "T" ? "T" : "F";
+  if (
+    s === "T" ||
+    s === "Y" ||
+    s === "1" ||
+    s === "YES" ||
+    s === "TRUE"
+  ) {
+    return "T";
+  }
+  if (s === "F" || s === "N" || s === "0" || s === "NO" || s === "FALSE") {
+    return "F";
+  }
+  return "F";
 }
 
 /** 카페24 GET policy → PUT request 형태로 변환 */
