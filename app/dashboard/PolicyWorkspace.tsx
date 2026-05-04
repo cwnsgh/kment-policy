@@ -122,6 +122,8 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   const [putHistoryLoading, setPutHistoryLoading] = useState(false);
   const [putHistoryError, setPutHistoryError] = useState<string | null>(null);
   const [expandedPutId, setExpandedPutId] = useState<string | null>(null);
+  /** true면 리치 에디터 표시. GET/저장본 불러온 직후에는 미리보기만 보여 줌 */
+  const [termsRichEditorOpen, setTermsRichEditorOpen] = useState(false);
 
   const q = useMemo(
     () => `mall_id=${encodeURIComponent(mallId)}`,
@@ -176,6 +178,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       const policy = data.policy as Cafe24PolicyPayload;
       setLivePolicy(policy);
       setTermsDraft(slotBodyFromLive(policy));
+      setTermsRichEditorOpen(false);
       console.log(
         `%c${LOG_PREFIX} Cafe24 GET — 원본 policy 객체 (아래 펼쳐서 확인)`,
         "color:#1d4ed8;font-weight:bold",
@@ -184,7 +187,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       console.table(policyDebugSummary(policy));
       setMsg({
         type: "ok",
-        text: `${SLOT_LABELS[MANAGED_POLICY_SLOT]}(카페24 현재값)을 불러왔습니다. (브라우저 콘솔에 GET policy 출력됨)`,
+        text: "카페24에 게시 중인 이용약관을 불러왔습니다. 미리보기를 확인한 뒤 필요하면 편집하세요.",
       });
     } catch (e) {
       setLivePolicy(null);
@@ -256,6 +259,26 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   useEffect(() => {
     void loadPutSnapshots();
   }, [loadPutSnapshots]);
+
+  const copyTermsHtml = useCallback(async () => {
+    const html = termsDraft;
+    if (!html.trim()) {
+      setMsg({
+        type: "err",
+        text: "복사할 HTML이 없습니다. 먼저 불러오거나 저장본을 선택하세요.",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(html);
+      setMsg({ type: "ok", text: "이용약관 HTML을 클립보드에 복사했습니다." });
+    } catch {
+      setMsg({
+        type: "err",
+        text: "복사에 실패했습니다. 브라우저에서 클립보드 권한을 허용했는지 확인하세요.",
+      });
+    }
+  }, [termsDraft]);
 
   const addVariant = async () => {
     const label = newRow.label.trim() || "1번";
@@ -390,7 +413,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     if (!termsDraft.trim()) {
       setMsg({
         type: "err",
-        text: "편집기에 저장할 이용약관 내용이 없습니다.",
+        text: "저장할 이용약관 본문이 없습니다.",
       });
       return;
     }
@@ -429,13 +452,13 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     if (!termsDraft.trim()) {
       setMsg({
         type: "err",
-        text: "이용약관 본문이 비어 있습니다. 카페24에서 불러오거나 저장본을 선택해 편집기에 불러오세요.",
+        text: "이용약관 본문이 비어 있습니다. 카페24에서 불러오거나 저장본을 선택하세요.",
       });
       return;
     }
     if (
       !confirm(
-        "아래 편집기에 있는 이용약관 HTML을 카페24에 반영합니다. (저장본을 고르면 기록에만 참고 라벨이 남습니다.) 개인정보·가입약관·철회는 건드리지 않습니다."
+        "지금 미리보기(또는 편집기)에 있는 이용약관 HTML을 카페24에 반영합니다. 왼쪽에서 저장본을 고르면 반영 기록에 참고 라벨만 남습니다. 개인정보·가입약관·철회는 바꾸지 않습니다."
       )
     ) {
       return;
@@ -480,6 +503,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
         const policy = data.policy as Cafe24PolicyPayload;
         setLivePolicy(policy);
         setTermsDraft(slotBodyFromLive(policy));
+        setTermsRichEditorOpen(false);
       }
       void loadPutSnapshots();
       setMsg({
@@ -501,8 +525,9 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       <aside className={styles.sidebar}>
         <p className={styles.sidebarTitle}>카페24 반영</p>
         <p className={styles.meta}>
-          반영되는 본문은 <strong>가운데 편집기</strong> 내용입니다. 저장본을
-          고르면 편집기에 불러오며, PUT 기록에 참고용 라벨만 남습니다.
+          반영되는 HTML은 메인 영역 <strong>미리보기·편집기</strong> 기준입니다.
+          저장본을 고르면 내용이 바뀌고, PUT 시 반영 기록에 참고 라벨만 남을 수
+          있어요.
         </p>
         <div className={styles.field}>
           <label className={styles.label}>shop_no</label>
@@ -515,9 +540,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
           />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>
-            저장본 불러오기 (편집기로)
-          </label>
+          <label className={styles.label}>저장본 불러오기</label>
           <select
             className={styles.select}
             value={pickTermsId}
@@ -526,7 +549,10 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
               setPickTermsId(v);
               if (v) {
                 const row = termsVariants.find((t) => t.id === v);
-                if (row) setTermsDraft(row.body);
+                if (row) {
+                  setTermsDraft(row.body);
+                  setTermsRichEditorOpen(false);
+                }
               }
             }}
           >
@@ -544,18 +570,21 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
           onClick={() => void applyCafe24()}
           disabled={loading}
         >
-          편집기 내용 → 카페24 PUT
+          카페24에 반영하기
         </button>
       </aside>
 
       <div className={styles.main}>
         <h2 className={styles.heading}>
-          {SLOT_LABELS[MANAGED_POLICY_SLOT]} · {mallId}
+          {SLOT_LABELS[MANAGED_POLICY_SLOT]}
         </h2>
+        <p className={styles.subheading}>
+          {mallId} · 카페24에서 가져와 확인한 뒤, 필요할 때만 편집하고 반영하세요
+        </p>
 
         <section className={styles.stepsPanel} aria-label="빠른 안내">
           <p className={styles.stepsLead}>
-            <strong>쇼핑몰 이용약관</strong>만 — 카페24 GET → 바로 편집 → PUT
+            <strong>쇼핑몰 이용약관</strong>만 다룹니다
           </p>
           <div className={styles.stepActions}>
             <button
@@ -578,41 +607,83 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
         </section>
 
         <p className={styles.hint}>
-          개인정보·가입 개인정보·철회는 카페24 관리자 그대로 두고, 여기서는{" "}
-          <strong>이용약관 HTML</strong>만 다룹니다.
+          개인정보·가입 개인정보·청약철회는 카페24 관리자에서 그대로 두고, 이
+          화면에서는 <strong>이용약관 HTML</strong>만 저장·반영합니다.
         </p>
 
-        <section className={styles.editorPanel} aria-label="이용약관 편집">
-          <div className={styles.editorPanelHead}>
-            <h3 className={styles.editorPanelTitle}>
-              {SLOT_LABELS[MANAGED_POLICY_SLOT]} — 바로 편집
-            </h3>
+        <section className={styles.previewCard} aria-label="이용약관 미리보기">
+          <div className={styles.cardHeader}>
+            <h3 className={styles.cardTitle}>미리보기</h3>
             {livePolicy ? (
-              <span className={styles.editorBadge}>
-                shop_no {livePolicy.shop_no} · 카페24에서 불러온 뒤 수정 가능
-              </span>
-            ) : (
-              <span className={styles.editorBadgeMuted}>
-                먼저 「카페24에서 불러오기」 또는 왼쪽 저장본을 선택하세요
-              </span>
-            )}
+              <span className={styles.badge}>shop {livePolicy.shop_no}</span>
+            ) : null}
           </div>
-          <PolicyRichEditor
-            html={termsDraft}
-            onChange={setTermsDraft}
-            placeholder="여기에서 문단·굵기·목록·링크를 편집합니다. 카페24 GET 후 바로 고칠 수 있습니다."
-            disabled={loading}
-          />
-          <div className={styles.editorToolbar}>
-            <button
-              type="button"
-              className={styles.btnSecondary}
-              onClick={() => void quickSaveDraftToDb()}
-              disabled={loading}
-            >
-              편집기 내용 → 저장본(DB)에 추가
-            </button>
-          </div>
+          {livePolicy || termsDraft.trim() ? (
+            <>
+              <div className={styles.previewFrame}>
+                <div
+                  className={styles.previewBody}
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      termsDraft.trim() ||
+                      "<p style=\"color:#8b95a1;margin:0\">내용이 비어 있습니다.</p>",
+                  }}
+                />
+              </div>
+              <div className={styles.previewActions}>
+                <button
+                  type="button"
+                  className={styles.btnGhost}
+                  onClick={() => void copyTermsHtml()}
+                  disabled={loading || !termsDraft.trim()}
+                >
+                  HTML 복사
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnPrimary}
+                  onClick={() => setTermsRichEditorOpen(true)}
+                  disabled={loading}
+                >
+                  편집하기
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className={styles.emptyLead}>
+              「카페24에서 불러오기」를 누르거나, 왼쪽에서 저장본을 선택하면
+              여기에 표시됩니다.
+            </p>
+          )}
+          {termsRichEditorOpen ? (
+            <>
+              <p className={styles.editSectionLabel}>에디터에서 수정</p>
+              <PolicyRichEditor
+                html={termsDraft}
+                onChange={setTermsDraft}
+                placeholder="문단·굵기·목록·링크 등을 편집하면 HTML로 반영됩니다."
+                disabled={loading}
+              />
+              <div className={styles.editRow}>
+                <button
+                  type="button"
+                  className={styles.btnGhost}
+                  onClick={() => setTermsRichEditorOpen(false)}
+                  disabled={loading}
+                >
+                  미리보기만 보기
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => void quickSaveDraftToDb()}
+                  disabled={loading || !termsDraft.trim()}
+                >
+                  이 내용 → 저장본(DB)에 추가
+                </button>
+              </div>
+            </>
+          ) : null}
         </section>
 
         {msg && (
@@ -646,7 +717,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
                 Supabase <strong>Project Settings → Data API → Exposed schemas</strong>
                 에 <code className={styles.codeInline}>policy</code> 추가
               </li>
-              <li>저장 후 「저장된 목록 (DB)」 다시 시도</li>
+              <li>저장 후 「저장본 목록 새로고침」 다시 시도</li>
             </ul>
           </div>
         ) : null}
@@ -894,9 +965,13 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
                   <button
                     type="button"
                     className={styles.btnSecondary}
-                    onClick={() => setTermsDraft(v.body)}
+                    onClick={() => {
+                      setTermsDraft(v.body);
+                      setPickTermsId(v.id);
+                      setTermsRichEditorOpen(false);
+                    }}
                   >
-                    편집기로
+                    미리보기로
                   </button>
                   <button
                     type="button"

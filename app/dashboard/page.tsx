@@ -1,6 +1,13 @@
 import { getServerSession } from "@/lib/auth/server-session";
+import { Noto_Sans_KR } from "next/font/google";
 import { PolicyWorkspace } from "./PolicyWorkspace";
 import styles from "./dashboard.module.css";
+
+const dashboardSans = Noto_Sans_KR({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
 
 export default async function DashboardPage({
   searchParams,
@@ -12,7 +19,7 @@ export default async function DashboardPage({
   const mallId = sp.mall_id ?? session?.mall_id ?? "";
 
   return (
-    <div className={styles.shell}>
+    <div className={`${styles.shell} ${dashboardSans.className}`}>
       {!mallId ? (
         <div className={styles.inner}>
           <h1 className={styles.heading}>대시보드</h1>
