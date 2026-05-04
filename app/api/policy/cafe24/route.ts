@@ -8,6 +8,7 @@ import {
   mergeLiveWithResolvedBodies,
 } from "@/lib/policy/mapCafe24";
 import {
+  MANAGED_POLICY_SLOT,
   POLICY_SLOTS,
   type PolicySlot,
   type PolicySlotPicks,
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * picks: 슬롯마다 variant id 또는 빈 문자열(현재 쇼핑몰 GET 값 유지)
+ * picks: 쇼핑몰 이용약관(terms_using_mall)만 variant id 가능, 나머지 슬롯은 항상 카페24 GET 유지
  * → GET → 조합 → PUT 한 번
  */
 export async function PUT(req: NextRequest) {
@@ -67,7 +68,12 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const mall_id = body.mall_id as string | undefined;
     const shop_no = Number(body.shop_no) || 1;
-    const picks = (body.picks ?? {}) as PolicySlotPicks;
+    const picksRaw = (body.picks ?? {}) as PolicySlotPicks;
+    const picks: PolicySlotPicks = {};
+    const only = picksRaw[MANAGED_POLICY_SLOT];
+    if (typeof only === "string" && only.trim()) {
+      picks[MANAGED_POLICY_SLOT] = only.trim();
+    }
 
     const auth = await requireMallSession(req, mall_id ?? null);
     if (auth) return auth;

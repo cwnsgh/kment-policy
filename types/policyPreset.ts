@@ -18,6 +18,13 @@ export const POLICY_SLOTS = [
 
 export type PolicySlot = (typeof POLICY_SLOTS)[number];
 
+/** 이 앱에서만 관리·히스토리·PUT 조합 대상 (쇼핑몰 이용약관) */
+export const MANAGED_POLICY_SLOT: PolicySlot = "terms_using_mall";
+
+export function isAppManagedPolicySlot(slot: string): boolean {
+  return slot === MANAGED_POLICY_SLOT;
+}
+
 /** 슬롯마다 따로 저장하는 한 줄(1번, 2번 …) */
 export interface PolicyTextVariantRow {
   id: string;

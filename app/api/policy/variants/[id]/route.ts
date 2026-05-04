@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, POLICY_SCHEMA } from "@/lib/db";
 import { requireMallSession } from "@/lib/api/routeAuth";
 import { logVariantRevision } from "@/lib/policy/variantRevisions";
+import { MANAGED_POLICY_SLOT } from "@/types/policyPreset";
 
 function table() {
   return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_text_variants");
@@ -26,6 +27,12 @@ export async function PATCH(
 
     if (fetchErr || !existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (existing.slot !== MANAGED_POLICY_SLOT) {
+      return NextResponse.json(
+        { error: "이 앱에서 관리하는 이용약관 항목만 수정할 수 있습니다." },
+        { status: 403 }
+      );
     }
 
     const patch: Record<string, unknown> = {
@@ -83,6 +90,13 @@ export async function DELETE(
     .eq("id", id)
     .eq("mall_id", mall_id!)
     .single();
+
+  if (existing && existing.slot !== MANAGED_POLICY_SLOT) {
+    return NextResponse.json(
+      { error: "이 앱에서 관리하는 이용약관 항목만 삭제할 수 있습니다." },
+      { status: 403 }
+    );
+  }
 
   if (existing) {
     void logVariantRevision({

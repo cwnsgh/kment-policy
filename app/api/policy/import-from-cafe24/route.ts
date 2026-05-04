@@ -5,7 +5,11 @@ import { logVariantRevision } from "@/lib/policy/variantRevisions";
 import { ensureValidAccessToken } from "@/lib/api/ensureValidAccessToken";
 import { fetchCafe24Policy } from "@/lib/api/cafe24Policy";
 import { getLiveSlotBody } from "@/lib/policy/mapCafe24";
-import { POLICY_SLOTS, type PolicySlot } from "@/types/policyPreset";
+import {
+  MANAGED_POLICY_SLOT,
+  POLICY_SLOTS,
+  type PolicySlot,
+} from "@/types/policyPreset";
 
 function table() {
   return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_text_variants");
@@ -26,6 +30,15 @@ export async function POST(req: NextRequest) {
     const slot = body.slot as string;
     if (!isSlot(slot)) {
       return NextResponse.json({ error: "invalid slot" }, { status: 400 });
+    }
+    if (slot !== MANAGED_POLICY_SLOT) {
+      return NextResponse.json(
+        {
+          error:
+            "이 앱은 쇼핑몰 이용약관만 카페24에서 가져올 수 있습니다.",
+        },
+        { status: 400 }
+      );
     }
 
     const shop_no = Number(body.shop_no) || 1;

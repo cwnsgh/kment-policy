@@ -1,5 +1,8 @@
 import { supabaseAdmin, POLICY_SCHEMA } from "@/lib/db";
-import type { VariantRevisionAction } from "@/types/policyPreset";
+import {
+  isAppManagedPolicySlot,
+  type VariantRevisionAction,
+} from "@/types/policyPreset";
 
 function revisionsTable() {
   return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_variant_revisions");
@@ -14,6 +17,9 @@ export async function logVariantRevision(params: {
   body: string;
   action: VariantRevisionAction;
 }): Promise<void> {
+  if (!isAppManagedPolicySlot(params.slot)) {
+    return;
+  }
   const { error } = await revisionsTable().insert({
     mall_id: params.mall_id,
     variant_id: params.variant_id,
