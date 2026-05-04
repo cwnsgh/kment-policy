@@ -13,6 +13,9 @@ import {
   type PolicySlotPicks,
 } from "@/types/policyPreset";
 
+/** Vercel에서 카페24 왕복이 길 때 기본 타임아웃 방지 (플랜별 상한은 Vercel 정책 따름) */
+export const maxDuration = 60;
+
 function variantsTable() {
   return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_text_variants");
 }
@@ -37,6 +40,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         error: "Cafe24 policy fetch failed",
+        step: "cafe24_get",
         cafe24_status: live.status,
         cafe24: live.body,
         hint:
@@ -81,8 +85,15 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json(
         {
           error: "Cafe24 policy fetch failed",
+          step: "cafe24_get",
           cafe24_status: liveRes.status,
           cafe24: liveRes.body,
+          hint:
+            liveRes.status === 401
+              ? "액세스 토큰 문제 가능. 재인증 후 다시 시도하세요."
+              : liveRes.status === 403
+                ? "GET 권한 부족 가능. 개발자 센터 스코프를 확인하세요."
+                : "PUT 전에 현재 약관을 읽어오는 단계에서 실패했습니다.",
         },
         { status: 502 }
       );
@@ -124,9 +135,22 @@ export async function PUT(req: NextRequest) {
 
     const requestBody = mergeLiveWithResolvedBodies(live, resolved);
     const result = await putCafe24Policy(mall_id!, token, shop_no, requestBody);
-    if (!result?.policy) {
+    if (!result.ok) {
       return NextResponse.json(
-        { error: "Cafe24 policy update failed" },
+        {
+          error: "Cafe24 policy update failed",
+          step: "cafe24_put",
+          cafe24_status: result.status,
+          cafe24: result.body,
+          hint:
+            result.status === 401
+              ? "액세스 토큰 문제 가능."
+              : result.status === 403
+                ? "약관 수정(쓰기) 권한이 없을 수 있습니다. mall.write_application 등 쓰기 스코프·앱 권한을 확인하세요."
+                : result.status === 400
+                  ? "요청 본문 검증 실패일 수 있습니다. 카페24 에러 메시지(cafe24)를 확인하세요."
+                  : "카페24 admin/policy PUT 응답을 확인하세요.",
+        },
         { status: 502 }
       );
     }

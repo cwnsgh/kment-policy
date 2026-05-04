@@ -53,12 +53,16 @@ export async function fetchCafe24Policy(
   return { ok: true, policy: parsed.policy };
 }
 
+export type PutCafe24PolicyResult =
+  | { ok: true; policy: Cafe24PolicyPayload }
+  | { ok: false; status: number; body: unknown };
+
 export async function putCafe24Policy(
   mallId: string,
   accessToken: string,
   shopNo: number,
   request: PolicyRequestBody
-): Promise<{ policy: Cafe24PolicyPayload } | null> {
+): Promise<PutCafe24PolicyResult> {
   const url = `https://${mallId}.cafe24api.com/api/v2/admin/policy`;
   const payload = {
     shop_no: shopNo,
@@ -82,7 +86,12 @@ export async function putCafe24Policy(
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     logger.error("admin/policy PUT 실패", { mallId, status: res.status, data });
-    return null;
+    return { ok: false, status: res.status, body: data };
   }
-  return data as { policy: Cafe24PolicyPayload };
+  const parsed = data as { policy?: Cafe24PolicyPayload } | null;
+  if (!parsed?.policy) {
+    logger.error("admin/policy PUT 응답에 policy 없음", { mallId, data });
+    return { ok: false, status: res.status, body: data };
+  }
+  return { ok: true, policy: parsed.policy };
 }

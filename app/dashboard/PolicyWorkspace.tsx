@@ -31,6 +31,26 @@ function isDbSetupError(text: string) {
   );
 }
 
+function formatPolicyApiError(
+  data: Record<string, unknown>,
+  fallback: string
+): string {
+  const parts: string[] = [String(data.error ?? fallback)];
+  if (typeof data.step === "string") parts.push(`단계: ${data.step}`);
+  if (typeof data.hint === "string") parts.push(data.hint);
+  if (data.cafe24_status != null) {
+    parts.push(`카페24 HTTP ${String(data.cafe24_status)}`);
+  }
+  if (data.cafe24 != null) {
+    const raw =
+      typeof data.cafe24 === "string"
+        ? data.cafe24
+        : JSON.stringify(data.cafe24);
+    parts.push(raw.length > 600 ? `${raw.slice(0, 600)}…` : raw);
+  }
+  return parts.join(" — ");
+}
+
 type VariantRow = {
   id: string;
   slot: PolicySlot;
@@ -143,21 +163,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       });
       const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
-        const parts: string[] = [
-          String(data.error ?? res.statusText),
-        ];
-        if (typeof data.hint === "string") parts.push(data.hint);
-        if (data.cafe24_status != null) {
-          parts.push(`카페24 HTTP ${String(data.cafe24_status)}`);
-        }
-        if (data.cafe24 != null) {
-          const raw =
-            typeof data.cafe24 === "string"
-              ? data.cafe24
-              : JSON.stringify(data.cafe24);
-          parts.push(raw.length > 600 ? `${raw.slice(0, 600)}…` : raw);
-        }
-        throw new Error(parts.join(" — "));
+        throw new Error(formatPolicyApiError(data, res.statusText));
       }
       if (!data.policy) throw new Error("응답에 policy가 없습니다.");
       setLivePolicy(data.policy as Cafe24PolicyPayload);
@@ -369,8 +375,10 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
           },
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new Error(formatPolicyApiError(data, res.statusText));
+      }
       setMsg({ type: "ok", text: "카페24에 반영했습니다." });
     } catch (e) {
       setMsg({
