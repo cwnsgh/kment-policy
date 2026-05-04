@@ -1,0 +1,40 @@
+.shell {
+  min-height: 100vh;
+  background: #f9fafb;
+  padding: 2rem;
+}
+
+.inner {
+  max-width: 36rem;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.08),
+    0 1px 2px rgb(0 0 0 / 0.06);
+  padding: 1.5rem;
+}
+
+.heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.lead {
+  margin: 0 0 1rem;
+  color: #4b5563;
+}
+
+.meta {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  color: #111827;
+}
