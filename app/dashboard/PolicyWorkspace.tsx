@@ -17,6 +17,26 @@ import type { Cafe24PolicyPayload } from "@/lib/api/cafe24Policy";
 import { PolicyRichEditor } from "./PolicyRichEditor";
 import styles from "./PolicyWorkspace.module.css";
 
+const LOG_PREFIX = "[kment-policy]";
+
+function policyBodyLen(s: unknown): number {
+  return typeof s === "string" ? s.length : 0;
+}
+
+/** 브라우저 콘솔용: 플래그 + 본문 길이만 표로 보기 */
+function policyDebugSummary(p: Cafe24PolicyPayload) {
+  return {
+    shop_no: p.shop_no,
+    use_privacy_join: p.use_privacy_join,
+    use_withdrawal: p.use_withdrawal,
+    required_withdrawal: p.required_withdrawal,
+    len_privacy_all: policyBodyLen(p.privacy_all),
+    len_terms_using_mall: policyBodyLen(p.terms_using_mall),
+    len_privacy_join: policyBodyLen(p.privacy_join),
+    len_withdrawal: policyBodyLen(p.withdrawal),
+  };
+}
+
 function slotBodyFromLive(p: Cafe24PolicyPayload): string {
   const v = p.terms_using_mall;
   return typeof v === "string" ? v : "";
@@ -48,6 +68,26 @@ function formatPolicyApiError(
     parts.push(raw.length > 600 ? `${raw.slice(0, 600)}…` : raw);
   }
   return parts.join(" — ");
+}
+
+/** PUT 422 등 카페24 본문을 보고 화면용 문구 보강 */
+function extraHintForPutFailure(data: Record<string, unknown>): string {
+  const status = Number(data.cafe24_status);
+  if (status !== 422 || data.cafe24 == null) return "";
+  let msg = "";
+  try {
+    const root = data.cafe24 as { error?: { message?: string } };
+    msg = root?.error?.message ?? "";
+  } catch {
+    return "";
+  }
+  if (/Cancellation Policy|use_withdrawal|required_withdrawal/i.test(msg)) {
+    return (
+      " | 콘솔에 방금 GET으로 받은 policy와 비교해 보세요. " +
+      "관리자에서 청약철회(취소) 정책을 켠 뒤 GET이 T로 바뀌는지 확인하거나, 카페24에 문의 시 이 메시지를 첨부하세요."
+    );
+  }
+  return "";
 }
 
 type VariantRow = {
@@ -118,13 +158,26 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       });
       const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
+        console.error(`${LOG_PREFIX} Cafe24 GET /api/policy/cafe24 실패`, {
+          mallId,
+          shopNo,
+          httpStatus: res.status,
+          body: data,
+        });
         throw new Error(formatPolicyApiError(data, res.statusText));
       }
       if (!data.policy) throw new Error("응답에 policy가 없습니다.");
-      setLivePolicy(data.policy as Cafe24PolicyPayload);
+      const policy = data.policy as Cafe24PolicyPayload;
+      setLivePolicy(policy);
+      console.log(
+        `%c${LOG_PREFIX} Cafe24 GET — 원본 policy 객체 (아래 펼쳐서 확인)`,
+        "color:#1d4ed8;font-weight:bold",
+        policy
+      );
+      console.table(policyDebugSummary(policy));
       setMsg({
         type: "ok",
-        text: `${SLOT_LABELS[MANAGED_POLICY_SLOT]}(카페24 현재값)을 불러왔습니다.`,
+        text: `${SLOT_LABELS[MANAGED_POLICY_SLOT]}(카페24 현재값)을 불러왔습니다. (브라우저 콘솔에 GET policy 출력됨)`,
       });
     } catch (e) {
       setLivePolicy(null);
@@ -307,23 +360,39 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     setLoading(true);
     setMsg(null);
     try {
+      const putBody = {
+        mall_id: mallId,
+        shop_no: shopNo,
+        picks: {
+          terms_using_mall: pickTermsId || undefined,
+        },
+      };
+      console.log(
+        `%c${LOG_PREFIX} Cafe24 PUT 요청(우리 앱 → /api/policy/cafe24)`,
+        "color:#047857;font-weight:bold",
+        putBody
+      );
       const res = await fetch("/api/policy/cafe24", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mall_id: mallId,
-          shop_no: shopNo,
-          picks: {
-            terms_using_mall: pickTermsId || undefined,
-          },
-        }),
+        body: JSON.stringify(putBody),
       });
       const data = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
-        throw new Error(formatPolicyApiError(data, res.statusText));
+        console.error(`${LOG_PREFIX} Cafe24 PUT 실패 — 서버 응답`, {
+          httpStatus: res.status,
+          body: data,
+        });
+        const base = formatPolicyApiError(data, res.statusText);
+        throw new Error(base + extraHintForPutFailure(data));
       }
-      setMsg({ type: "ok", text: "카페24에 이용약관을 반영했습니다." });
+      console.log(
+        `%c${LOG_PREFIX} Cafe24 PUT 성공 — 응답 policy`,
+        "color:#047857;font-weight:bold",
+        data.policy
+      );
+      setMsg({ type: "ok", text: "카페24에 이용약관을 반영했습니다. (콘솔에 응답 policy 출력됨)" });
     } catch (e) {
       setMsg({
         type: "err",
