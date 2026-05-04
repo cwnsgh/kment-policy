@@ -29,17 +29,39 @@ export function getLiveSlotBody(
   return typeof v === "string" ? v : "";
 }
 
+/**
+ * 카페24 검증: 플래그가 끄면 해당 본문을 PUT에 실으면 422가 날 수 있음.
+ * (예: use_withdrawal=F 인데 withdrawal HTML 전송 → Cancellation Policy 미사용 오류)
+ */
+export function enforcePolicyFlagsAgainstBodies(
+  body: PolicyRequestBody
+): PolicyRequestBody {
+  let out = { ...body };
+  if (out.use_privacy_join === "F") {
+    out = { ...out, privacy_join: "" };
+  }
+  if (out.use_withdrawal === "F") {
+    out = {
+      ...out,
+      withdrawal: "",
+      required_withdrawal: "F",
+    };
+  }
+  return out;
+}
+
 /** 슬롯별 최종 본문(이미 pick 반영)으로 PUT 본문 생성 */
 export function mergeLiveWithResolvedBodies(
   live: Cafe24PolicyPayload,
   resolved: Record<PolicySlot, string>
 ): PolicyRequestBody {
   const base = payloadToRequestBody(live);
-  return {
+  const merged: PolicyRequestBody = {
     ...base,
     privacy_all: resolved.privacy_all,
     terms_using_mall: resolved.terms_using_mall,
     privacy_join: resolved.privacy_join,
     withdrawal: resolved.withdrawal,
   };
+  return enforcePolicyFlagsAgainstBodies(merged);
 }
