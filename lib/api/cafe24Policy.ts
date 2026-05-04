@@ -25,11 +25,15 @@ function policyHeaders(accessToken: string) {
   };
 }
 
+export type FetchCafe24PolicyResult =
+  | { ok: true; policy: Cafe24PolicyPayload }
+  | { ok: false; status: number; body: unknown };
+
 export async function fetchCafe24Policy(
   mallId: string,
   accessToken: string,
   shopNo: number = 1
-): Promise<{ policy: Cafe24PolicyPayload } | null> {
+): Promise<FetchCafe24PolicyResult> {
   const url = `https://${mallId}.cafe24api.com/api/v2/admin/policy?shop_no=${shopNo}`;
   const res = await fetch(url, {
     method: "GET",
@@ -39,9 +43,14 @@ export async function fetchCafe24Policy(
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     logger.error("admin/policy GET 실패", { mallId, status: res.status, body });
-    return null;
+    return { ok: false, status: res.status, body };
   }
-  return body as { policy: Cafe24PolicyPayload };
+  const parsed = body as { policy?: Cafe24PolicyPayload } | null;
+  if (!parsed?.policy) {
+    logger.error("admin/policy GET에 policy 필드 없음", { mallId, body });
+    return { ok: false, status: res.status, body };
+  }
+  return { ok: true, policy: parsed.policy };
 }
 
 export async function putCafe24Policy(

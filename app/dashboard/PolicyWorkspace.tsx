@@ -141,8 +141,24 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       const res = await fetch(`/api/policy/cafe24?${p}`, {
         credentials: "include",
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        const parts: string[] = [
+          String(data.error ?? res.statusText),
+        ];
+        if (typeof data.hint === "string") parts.push(data.hint);
+        if (data.cafe24_status != null) {
+          parts.push(`카페24 HTTP ${String(data.cafe24_status)}`);
+        }
+        if (data.cafe24 != null) {
+          const raw =
+            typeof data.cafe24 === "string"
+              ? data.cafe24
+              : JSON.stringify(data.cafe24);
+          parts.push(raw.length > 600 ? `${raw.slice(0, 600)}…` : raw);
+        }
+        throw new Error(parts.join(" — "));
+      }
       if (!data.policy) throw new Error("응답에 policy가 없습니다.");
       setLivePolicy(data.policy as Cafe24PolicyPayload);
       setMsg({

@@ -33,9 +33,21 @@ export async function GET(req: NextRequest) {
   }
 
   const live = await fetchCafe24Policy(mall_id!, token, shop_no);
-  if (!live?.policy) {
+  if (!live.ok) {
     return NextResponse.json(
-      { error: "Cafe24 policy fetch failed" },
+      {
+        error: "Cafe24 policy fetch failed",
+        cafe24_status: live.status,
+        cafe24: live.body,
+        hint:
+          live.status === 401
+            ? "액세스 토큰이 없거나 만료됐을 수 있습니다. 앱 재설치(재인증)를 시도하세요."
+            : live.status === 403
+              ? "이 토큰으로 admin/policy를 호출할 권한이 없을 수 있습니다. 개발자 센터 스코프·앱 권한을 확인하세요."
+              : live.status === 404
+                ? "몰 아이디(mall_id) 또는 shop_no가 잘못됐을 수 있습니다."
+                : "카페24 API 응답을 확인하세요. (cafe24 필드)",
+      },
       { status: 502 }
     );
   }
@@ -65,9 +77,13 @@ export async function PUT(req: NextRequest) {
     }
 
     const liveRes = await fetchCafe24Policy(mall_id!, token, shop_no);
-    if (!liveRes?.policy) {
+    if (!liveRes.ok) {
       return NextResponse.json(
-        { error: "Cafe24 policy fetch failed" },
+        {
+          error: "Cafe24 policy fetch failed",
+          cafe24_status: liveRes.status,
+          cafe24: liveRes.body,
+        },
         { status: 502 }
       );
     }

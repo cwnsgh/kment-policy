@@ -42,9 +42,13 @@ export async function POST(req: NextRequest) {
     }
 
     const live = await fetchCafe24Policy(mall_id!, token, shop_no);
-    if (!live?.policy) {
+    if (!live.ok) {
       return NextResponse.json(
-        { error: "Cafe24 policy fetch failed" },
+        {
+          error: "Cafe24 policy fetch failed",
+          cafe24_status: live.status,
+          cafe24: live.body,
+        },
         { status: 502 }
       );
     }
