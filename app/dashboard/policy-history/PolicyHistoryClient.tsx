@@ -82,13 +82,20 @@ export function PolicyHistoryClient() {
 
   const afterHtml = selected?.terms_body ?? "";
 
-  const close = () => {
-    if (typeof window !== "undefined" && window.opener) {
-      window.close();
-      return;
-    }
-    router.back();
-  };
+  const close = useCallback(() => {
+    window.close();
+    window.setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      if (mallId) {
+        router.replace(
+          `/dashboard?mall_id=${encodeURIComponent(mallId)}`,
+          { scroll: false }
+        );
+      } else {
+        router.back();
+      }
+    }, 150);
+  }, [mallId, router]);
 
   if (!mallId) {
     return (

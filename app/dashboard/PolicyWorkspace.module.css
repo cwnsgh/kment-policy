@@ -1,8 +1,26 @@
 /* 토스 느낌: 넉넉한 여백, 명확한 위계, 블루 포인트, 부드러운 카드 */
-
+/* 토큰은 .layout 밖(탭·저장본 패널)에서도 쓰이므로 루트에 정의 */
 .workspaceRoot {
+  --toss-bg: #f2f4f6;
+  --toss-surface: #ffffff;
+  --toss-text: #191f28;
+  --toss-sub: #4e5968;
+  --toss-muted: #8b95a1;
+  --toss-blue: #3182f6;
+  --toss-blue-hover: #2269eb;
+  --toss-border: #e5e8eb;
+  --toss-radius-lg: 20px;
+  --toss-radius-md: 12px;
+  --toss-radius-sm: 8px;
+  --toss-shadow: 0 2px 12px rgba(0, 27, 55, 0.05);
+  --toss-shadow-sm: 0 1px 3px rgba(0, 27, 55, 0.06);
+
   max-width: 1120px;
   margin: 0 auto;
+  color: var(--toss-text);
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
 }
 
 .tabBar {
@@ -43,8 +61,6 @@
 }
 
 .variantsLayout {
-  max-width: 1120px;
-  margin: 0 auto;
   background: var(--toss-surface);
   border-radius: var(--toss-radius-lg);
   box-shadow: var(--toss-shadow);
@@ -54,6 +70,12 @@
   font-size: 15px;
   line-height: 1.5;
   letter-spacing: -0.02em;
+}
+
+.variantsLayout .slotSection:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .variantsTop {
@@ -81,20 +103,6 @@
 }
 
 .layout {
-  --toss-bg: #f2f4f6;
-  --toss-surface: #ffffff;
-  --toss-text: #191f28;
-  --toss-sub: #4e5968;
-  --toss-muted: #8b95a1;
-  --toss-blue: #3182f6;
-  --toss-blue-hover: #2269eb;
-  --toss-border: #e5e8eb;
-  --toss-radius-lg: 20px;
-  --toss-radius-md: 12px;
-  --toss-radius-sm: 8px;
-  --toss-shadow: 0 2px 12px rgba(0, 27, 55, 0.05);
-  --toss-shadow-sm: 0 1px 3px rgba(0, 27, 55, 0.06);
-
   max-width: 1120px;
   margin: 0 auto;
   display: grid;

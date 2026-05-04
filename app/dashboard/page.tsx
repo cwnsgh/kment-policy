@@ -35,11 +35,12 @@ function DashboardPolicyFallback({
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mall_id?: string }>;
+  searchParams: Promise<{ mall_id?: string; tab?: string }>;
 }) {
   const sp = await searchParams;
   const session = await getServerSession();
   const mallId = sp.mall_id ?? session?.mall_id ?? "";
+  const initialTab = sp.tab === "save" ? ("save" as const) : ("reflect" as const);
 
   return (
     <div className={`${styles.shell} ${dashboardSans.className}`}>
@@ -55,7 +56,11 @@ export default async function DashboardPage({
         <Suspense
           fallback={<DashboardPolicyFallback className={dashboardSans.className} />}
         >
-          <PolicyWorkspace key={mallId} mallId={mallId} />
+          <PolicyWorkspace
+            key={mallId}
+            mallId={mallId}
+            initialTab={initialTab}
+          />
         </Suspense>
       )}
     </div>

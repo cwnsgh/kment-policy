@@ -2,12 +2,13 @@
 
 import {
   Fragment,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   MANAGED_POLICY_SLOT,
   REVISION_ACTION_LABELS,
@@ -24,11 +25,7 @@ function openPolicyPutHistoryWindow(mallId: string, shopNo: number) {
   const u = new URL("/dashboard/policy-history", window.location.origin);
   u.searchParams.set("mall_id", mallId);
   u.searchParams.set("shop_no", String(shopNo));
-  window.open(
-    `${u.pathname}${u.search}`,
-    "_blank",
-    "noopener,noreferrer,width=1040,height=880"
-  );
+  window.open(`${u.pathname}${u.search}`, "_blank", "width=1040,height=880");
 }
 
 function policyBodyLen(s: unknown): number {
@@ -111,12 +108,19 @@ type VariantRow = {
 
 type EditState = { id: string; label: string; body: string };
 
-export function PolicyWorkspace({ mallId }: { mallId: string }) {
+export function PolicyWorkspace({
+  mallId,
+  initialTab = "reflect",
+}: {
+  mallId: string;
+  initialTab?: "reflect" | "save";
+}) {
   const [termsVariants, setTermsVariants] = useState<VariantRow[]>([]);
   const [pickTermsId, setPickTermsId] = useState("");
   const [newRow, setNewRow] = useState({ label: "", body: "" });
   const [shopNo, setShopNo] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [variantsRefreshing, setVariantsRefreshing] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
@@ -134,16 +138,24 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
 
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") === "save" ? "save" : "reflect";
+  const [activeTab, setActiveTabState] = useState<"reflect" | "save">(
+    initialTab
+  );
+  useEffect(() => {
+    setActiveTabState(initialTab);
+  }, [initialTab]);
+
   const setActiveTab = useCallback(
     (tab: "reflect" | "save") => {
+      setActiveTabState(tab);
       const p = new URLSearchParams();
       p.set("mall_id", mallId);
       if (tab === "save") {
         p.set("tab", "save");
       }
-      router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+      startTransition(() => {
+        router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+      });
     },
     [mallId, pathname, router]
   );
@@ -154,8 +166,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   );
 
   const loadVariants = useCallback(async (): Promise<boolean> => {
-    setLoading(true);
-    setMsg(null);
+    setVariantsRefreshing(true);
     try {
       const res = await fetch(
         `/api/policy/variants?mall_id=${encodeURIComponent(mallId)}`,
@@ -172,7 +183,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       });
       return false;
     } finally {
-      setLoading(false);
+      setVariantsRefreshing(false);
     }
   }, [mallId]);
 
@@ -664,7 +675,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
               type="button"
               className={styles.btnSecondary}
               onClick={() => void loadVariants()}
-              disabled={loading}
+              disabled={loading || variantsRefreshing}
             >
               저장본 목록 새로고침
             </button>
