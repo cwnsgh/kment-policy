@@ -352,3 +352,94 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+.historySection {
+  margin-bottom: 1.75rem;
+  padding: 1rem;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+}
+
+.historyTitle {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.historyHint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+.historyToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.historyLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.historyLabel .select {
+  min-width: 12rem;
+}
+
+.historyTableWrap {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  background: #fff;
+}
+
+.historyTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.historyTable th,
+.historyTable td {
+  padding: 0.5rem 0.625rem;
+  text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.historyTable th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+}
+
+.historyCellTime {
+  white-space: nowrap;
+  color: #6b7280;
+}
+
+.historyCellLabel {
+  max-width: 10rem;
+  word-break: break-word;
+}
+
+.historyCellMono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.historyBodyRow td {
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+}

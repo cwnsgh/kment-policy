@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   POLICY_SLOTS,
+  REVISION_ACTION_LABELS,
   SLOT_LABELS,
   type PolicySlot,
+  type VariantRevisionRow,
 } from "@/types/policyPreset";
 import { PolicyRichEditor } from "./PolicyRichEditor";
 import styles from "./PolicyWorkspace.module.css";
@@ -59,6 +67,13 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     label: string;
     body: string;
   } | null>(null);
+  const [revisions, setRevisions] = useState<VariantRevisionRow[]>([]);
+  const [historySlot, setHistorySlot] = useState<"" | PolicySlot>("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [expandedRevisionId, setExpandedRevisionId] = useState<string | null>(
+    null
+  );
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const q = useMemo(
     () => `mall_id=${encodeURIComponent(mallId)}`,
@@ -98,9 +113,43 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     }
   }, [mallId]);
 
+  const loadRevisions = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const p = new URLSearchParams({
+        mall_id: mallId,
+        limit: "100",
+      });
+      if (historySlot) p.set("slot", historySlot);
+      const res = await fetch(`/api/policy/variant-revisions?${p}`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      const raw = (data.revisions || []) as VariantRevisionRow[];
+      setRevisions(
+        raw.filter((r) =>
+          POLICY_SLOTS.includes(r.slot as PolicySlot)
+        ) as VariantRevisionRow[]
+      );
+    } catch (e) {
+      setRevisions([]);
+      setHistoryError(
+        e instanceof Error ? e.message : "히스토리를 불러오지 못했습니다."
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [mallId, historySlot]);
+
   useEffect(() => {
     void loadVariants();
   }, [loadVariants]);
+
+  useEffect(() => {
+    void loadRevisions();
+  }, [loadRevisions]);
 
   const setPick = (slot: PolicySlot, variantId: string) => {
     setPicks((p) => ({ ...p, [slot]: variantId }));
@@ -131,6 +180,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       }));
       setMsg({ type: "ok", text: `${SLOT_LABELS[slot]}에 "${label}" 저장했습니다.` });
       await loadVariants();
+      void loadRevisions();
     } catch (e) {
       setMsg({
         type: "err",
@@ -162,6 +212,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       if (!res.ok) throw new Error(data.error || res.statusText);
       setMsg({ type: "ok", text: "카페24에서 이 슬롯만 가져왔습니다." });
       await loadVariants();
+      void loadRevisions();
     } catch (e) {
       setMsg({
         type: "err",
@@ -184,6 +235,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       if (!res.ok) throw new Error(data.error || res.statusText);
       setPicks((p) => (p[slot] === id ? { ...p, [slot]: "" } : p));
       await loadVariants();
+      void loadRevisions();
     } catch (e) {
       setMsg({
         type: "err",
@@ -214,6 +266,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       setEdit(null);
       setMsg({ type: "ok", text: "수정했습니다." });
       await loadVariants();
+      void loadRevisions();
     } catch (e) {
       setMsg({
         type: "err",
@@ -333,6 +386,108 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
             전체 새로고침
           </button>
         </div>
+
+        <section className={styles.historySection} aria-labelledby="history-heading">
+          <h3 id="history-heading" className={styles.historyTitle}>
+            변경 히스토리
+          </h3>
+          <p className={styles.historyHint}>
+            슬롯별 저장본이 <strong>추가·수정·삭제</strong>될 때마다 기록됩니다.
+            &quot;수정 직전&quot;은 바뀌기 <strong>이전</strong> 내용입니다.
+          </p>
+          {historyError ? (
+            <p className={styles.msgErr}>{historyError}</p>
+          ) : null}
+          <div className={styles.historyToolbar}>
+            <label className={styles.historyLabel}>
+              슬롯 필터
+              <select
+                className={styles.select}
+                value={historySlot}
+                onChange={(e) =>
+                  setHistorySlot(
+                    (e.target.value || "") as "" | PolicySlot
+                  )
+                }
+              >
+                <option value="">전체</option>
+                {POLICY_SLOTS.map((s) => (
+                  <option key={s} value={s}>
+                    {SLOT_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className={styles.btnSecondary}
+              onClick={() => void loadRevisions()}
+              disabled={historyLoading}
+            >
+              히스토리 새로고침
+            </button>
+          </div>
+          {historyLoading && revisions.length === 0 ? (
+            <p className={styles.meta}>불러오는 중…</p>
+          ) : revisions.length === 0 ? (
+            <p className={styles.meta}>기록이 없습니다.</p>
+          ) : (
+            <div className={styles.historyTableWrap}>
+              <table className={styles.historyTable}>
+                <thead>
+                  <tr>
+                    <th>시각</th>
+                    <th>슬롯</th>
+                    <th>구분</th>
+                    <th>라벨</th>
+                    <th>variant</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {revisions.map((r) => (
+                    <Fragment key={r.id}>
+                      <tr>
+                        <td className={styles.historyCellTime}>
+                          {new Date(r.created_at).toLocaleString("ko-KR")}
+                        </td>
+                        <td>{SLOT_LABELS[r.slot]}</td>
+                        <td>{REVISION_ACTION_LABELS[r.action]}</td>
+                        <td className={styles.historyCellLabel}>{r.label}</td>
+                        <td className={styles.historyCellMono}>
+                          {r.variant_id.slice(0, 8)}…
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className={styles.btnSecondary}
+                            onClick={() =>
+                              setExpandedRevisionId((cur) =>
+                                cur === r.id ? null : r.id
+                              )
+                            }
+                          >
+                            {expandedRevisionId === r.id ? "접기" : "본문"}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedRevisionId === r.id ? (
+                        <tr className={styles.historyBodyRow}>
+                          <td colSpan={6}>
+                            <div
+                              className={styles.htmlPreview}
+                              dangerouslySetInnerHTML={{ __html: r.body }}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         {edit && (
           <div className={styles.editBox}>

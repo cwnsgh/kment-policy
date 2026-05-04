@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, POLICY_SCHEMA } from "@/lib/db";
 import { requireMallSession } from "@/lib/api/routeAuth";
+import { logVariantRevision } from "@/lib/policy/variantRevisions";
 
 function table() {
   return supabaseAdmin.schema(POLICY_SCHEMA).from("policy_text_variants");
@@ -17,11 +18,37 @@ export async function PATCH(
     const auth = await requireMallSession(req, mall_id ?? null);
     if (auth) return auth;
 
+    const { data: existing, error: fetchErr } = await table()
+      .select("id, mall_id, slot, label, body")
+      .eq("id", id)
+      .eq("mall_id", mall_id!)
+      .single();
+
+    if (fetchErr || !existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const patch: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
     if (typeof body.label === "string") patch.label = body.label;
     if (typeof body.body === "string") patch.body = body.body;
+
+    const labelChanged =
+      typeof body.label === "string" && body.label !== existing.label;
+    const bodyChanged =
+      typeof body.body === "string" && body.body !== existing.body;
+
+    if (labelChanged || bodyChanged) {
+      void logVariantRevision({
+        mall_id: mall_id!,
+        variant_id: id,
+        slot: existing.slot as string,
+        label: existing.label as string,
+        body: existing.body as string,
+        action: "update",
+      });
+    }
 
     const { data, error } = await table()
       .update(patch)
@@ -50,6 +77,23 @@ export async function DELETE(
   const mall_id = req.nextUrl.searchParams.get("mall_id");
   const auth = await requireMallSession(req, mall_id);
   if (auth) return auth;
+
+  const { data: existing } = await table()
+    .select("id, mall_id, slot, label, body")
+    .eq("id", id)
+    .eq("mall_id", mall_id!)
+    .single();
+
+  if (existing) {
+    void logVariantRevision({
+      mall_id: mall_id!,
+      variant_id: id,
+      slot: existing.slot as string,
+      label: existing.label as string,
+      body: existing.body as string,
+      action: "delete",
+    });
+  }
 
   const { error } = await table().delete().eq("id", id).eq("mall_id", mall_id!);
 

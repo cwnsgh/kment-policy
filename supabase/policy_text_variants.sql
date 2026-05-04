@@ -27,3 +27,5 @@ create index if not exists policy_text_variants_mall_slot_idx
 grant all on table policy.policy_text_variants to service_role;
 
 alter table policy.policy_text_variants enable row level security;
+
+-- 변경 히스토리: supabase/policy_variant_revisions.sql 실행

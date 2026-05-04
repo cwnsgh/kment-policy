@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, POLICY_SCHEMA } from "@/lib/db";
 import { requireMallSession } from "@/lib/api/routeAuth";
+import { logVariantRevision } from "@/lib/policy/variantRevisions";
 import { ensureValidAccessToken } from "@/lib/api/ensureValidAccessToken";
 import { fetchCafe24Policy } from "@/lib/api/cafe24Policy";
 import { getLiveSlotBody } from "@/lib/policy/mapCafe24";
@@ -64,6 +65,14 @@ export async function POST(req: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+    void logVariantRevision({
+      mall_id: mall_id!,
+      variant_id: data.id as string,
+      slot,
+      label: data.label as string,
+      body: data.body as string,
+      action: "create",
+    });
     return NextResponse.json({ variant: data });
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
