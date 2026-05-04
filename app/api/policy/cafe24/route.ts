@@ -157,6 +157,7 @@ export async function PUT(req: NextRequest) {
     logger.info("admin/policy PUT 시도", {
       mall_id,
       shop_no,
+      save_type: "C",
       ...summarizePolicyPut(requestBody),
     });
     const result = await putCafe24Policy(mall_id!, token, shop_no, requestBody);
@@ -164,6 +165,7 @@ export async function PUT(req: NextRequest) {
       logger.warn("admin/policy PUT 실패", {
         mall_id,
         shop_no,
+        save_type: "C",
         status: result.status,
         ...summarizePolicyPut(requestBody),
         cafe24: result.body,

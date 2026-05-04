@@ -69,7 +69,9 @@ export async function putCafe24Policy(
    * "Cancellation Policy…" 422가 나는 몰이 있어, 철회 OFF일 땐 해당 키를 생략.
    * (문서 예시는 전 필드지만, 실제 API는 부분 생략을 허용하는 경우가 있음)
    */
+  /** 카페24 기본은 S(표준); 앱 PUT은 사용자 정의 반영이므로 C 고정. */
   const requestPayload: Record<string, string> = {
+    save_type: "C",
     privacy_all: request.privacy_all ?? "",
     terms_using_mall: request.terms_using_mall ?? "",
     use_privacy_join: request.use_privacy_join,
