@@ -7,11 +7,11 @@ import {
   useMemo,
   useState,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   MANAGED_POLICY_SLOT,
   REVISION_ACTION_LABELS,
   SLOT_LABELS,
-  type PolicyPutSnapshotRow,
   type VariantRevisionRow,
 } from "@/types/policyPreset";
 import type { Cafe24PolicyPayload } from "@/lib/api/cafe24Policy";
@@ -19,6 +19,17 @@ import { PolicyRichEditor } from "./PolicyRichEditor";
 import styles from "./PolicyWorkspace.module.css";
 
 const LOG_PREFIX = "[kment-policy]";
+
+function openPolicyPutHistoryWindow(mallId: string, shopNo: number) {
+  const u = new URL("/dashboard/policy-history", window.location.origin);
+  u.searchParams.set("mall_id", mallId);
+  u.searchParams.set("shop_no", String(shopNo));
+  window.open(
+    `${u.pathname}${u.search}`,
+    "_blank",
+    "noopener,noreferrer,width=1040,height=880"
+  );
+}
 
 function policyBodyLen(s: unknown): number {
   return typeof s === "string" ? s.length : 0;
@@ -118,12 +129,24 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [livePolicy, setLivePolicy] = useState<Cafe24PolicyPayload | null>(null);
   const [termsDraft, setTermsDraft] = useState("");
-  const [putSnapshots, setPutSnapshots] = useState<PolicyPutSnapshotRow[]>([]);
-  const [putHistoryLoading, setPutHistoryLoading] = useState(false);
-  const [putHistoryError, setPutHistoryError] = useState<string | null>(null);
-  const [expandedPutId, setExpandedPutId] = useState<string | null>(null);
   /** true면 리치 에디터 표시. GET/저장본 불러온 직후에는 미리보기만 보여 줌 */
   const [termsRichEditorOpen, setTermsRichEditorOpen] = useState(false);
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeTab = searchParams.get("tab") === "save" ? "save" : "reflect";
+  const setActiveTab = useCallback(
+    (tab: "reflect" | "save") => {
+      const p = new URLSearchParams();
+      p.set("mall_id", mallId);
+      if (tab === "save") {
+        p.set("tab", "save");
+      }
+      router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    },
+    [mallId, pathname, router]
+  );
 
   const q = useMemo(
     () => `mall_id=${encodeURIComponent(mallId)}`,
@@ -227,27 +250,6 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
     }
   }, [mallId]);
 
-  const loadPutSnapshots = useCallback(async () => {
-    setPutHistoryLoading(true);
-    setPutHistoryError(null);
-    try {
-      const p = new URLSearchParams({ mall_id: mallId, limit: "100" });
-      const res = await fetch(`/api/policy/put-snapshots?${p}`, {
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
-      setPutSnapshots((data.snapshots || []) as PolicyPutSnapshotRow[]);
-    } catch (e) {
-      setPutSnapshots([]);
-      setPutHistoryError(
-        e instanceof Error ? e.message : "반영 기록을 불러오지 못했습니다."
-      );
-    } finally {
-      setPutHistoryLoading(false);
-    }
-  }, [mallId]);
-
   useEffect(() => {
     void loadVariants();
   }, [loadVariants]);
@@ -255,10 +257,6 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   useEffect(() => {
     void loadRevisions();
   }, [loadRevisions]);
-
-  useEffect(() => {
-    void loadPutSnapshots();
-  }, [loadPutSnapshots]);
 
   const copyTermsHtml = useCallback(async () => {
     const html = termsDraft;
@@ -305,6 +303,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       });
       await loadVariants();
       void loadRevisions();
+      setActiveTab("save");
     } catch (e) {
       setMsg({
         type: "err",
@@ -438,6 +437,7 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
       setMsg({ type: "ok", text: "편집기 내용을 저장본(DB)에 추가했습니다." });
       await loadVariants();
       void loadRevisions();
+      setActiveTab("save");
     } catch (e) {
       setMsg({
         type: "err",
@@ -505,10 +505,9 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
         setTermsDraft(slotBodyFromLive(policy));
         setTermsRichEditorOpen(false);
       }
-      void loadPutSnapshots();
       setMsg({
         type: "ok",
-        text: "카페24에 이용약관을 반영했습니다. 반영 기록에 스냅샷이 남습니다.",
+        text: "카페24에 이용약관을 반영했습니다. 「반영 이력 (새 창)」에서 직전·이번 내용을 비교할 수 있습니다.",
       });
     } catch (e) {
       setMsg({
@@ -521,6 +520,65 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
   };
 
   return (
+    <div className={styles.workspaceRoot}>
+      <nav className={styles.tabBar} aria-label="대시보드 탭">
+        <button
+          type="button"
+          className={`${styles.tabButton} ${
+            activeTab === "reflect" ? styles.tabButtonActive : ""
+          }`}
+          onClick={() => setActiveTab("reflect")}
+        >
+          카페24 반영
+        </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${
+            activeTab === "save" ? styles.tabButtonActive : ""
+          }`}
+          onClick={() => setActiveTab("save")}
+        >
+          저장본 관리
+        </button>
+      </nav>
+
+      {msg && (
+        <p className={msg.type === "ok" ? styles.msgOk : styles.msgErr}>
+          {msg.text}
+        </p>
+      )}
+
+      {msg?.type === "err" && isDbSetupError(msg.text) ? (
+        <div className={styles.setupCallout} role="note">
+          <strong>DB / Supabase 설정이 필요할 때 나는 메시지입니다.</strong>
+          <ul className={styles.setupList}>
+            <li>
+              Supabase SQL Editor에서{" "}
+              <code className={styles.codeInline}>supabase/policy_init.sql</code>{" "}
+              전체 실행 (테이블 생성)
+            </li>
+            <li>
+              <code className={styles.codeInline}>
+                supabase/policy_variant_revisions.sql
+              </code>{" "}
+              실행 (저장본 변경 기록)
+            </li>
+            <li>
+              <code className={styles.codeInline}>
+                supabase/policy_put_snapshots.sql
+              </code>{" "}
+              실행 (카페24 PUT 반영 스냅샷)
+            </li>
+            <li>
+              Supabase <strong>Project Settings → Data API → Exposed schemas</strong>
+              에 <code className={styles.codeInline}>policy</code> 추가
+            </li>
+            <li>저장 후 「저장본 목록 새로고침」 다시 시도</li>
+          </ul>
+        </div>
+      ) : null}
+
+      {activeTab === "reflect" ? (
     <div className={styles.layout}>
       <aside className={styles.sidebar}>
         <p className={styles.sidebarTitle}>카페24 반영</p>
@@ -572,6 +630,13 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
         >
           카페24에 반영하기
         </button>
+        <button
+          type="button"
+          className={`${styles.btnSecondary} ${styles.sidebarHistoryBtn}`}
+          onClick={() => openPolicyPutHistoryWindow(mallId, shopNo)}
+        >
+          반영 이력 (새 창)
+        </button>
       </aside>
 
       <div className={styles.main}>
@@ -608,7 +673,14 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
 
         <p className={styles.hint}>
           개인정보·가입 개인정보·청약철회는 카페24 관리자에서 그대로 두고, 이
-          화면에서는 <strong>이용약관 HTML</strong>만 저장·반영합니다.
+          화면에서는 <strong>이용약관 HTML</strong>만 저장·반영합니다.{" "}
+          <button
+            type="button"
+            className={styles.hintLink}
+            onClick={() => openPolicyPutHistoryWindow(mallId, shopNo)}
+          >
+            반영 이력은 새 창에서 보기 →
+          </button>
         </p>
 
         <section className={styles.previewCard} aria-label="이용약관 미리보기">
@@ -685,132 +757,26 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
             </>
           ) : null}
         </section>
-
-        {msg && (
-          <p className={msg.type === "ok" ? styles.msgOk : styles.msgErr}>
-            {msg.text}
+      </div>
+    </div>
+      ) : (
+    <div className={styles.variantsLayout}>
+      <div className={styles.variantsTop}>
+        <div>
+          <h2 className={styles.variantsHeading}>저장본 (DB)</h2>
+          <p className={styles.variantsLead}>
+            {mallId} · 라벨·본문을 관리합니다. 반영 탭에서 미리보기로 불러갈 수
+            있습니다.
           </p>
-        )}
-
-        {msg?.type === "err" && isDbSetupError(msg.text) ? (
-          <div className={styles.setupCallout} role="note">
-            <strong>DB / Supabase 설정이 필요할 때 나는 메시지입니다.</strong>
-            <ul className={styles.setupList}>
-              <li>
-                Supabase SQL Editor에서{" "}
-                <code className={styles.codeInline}>supabase/policy_init.sql</code>{" "}
-                전체 실행 (테이블 생성)
-              </li>
-              <li>
-                <code className={styles.codeInline}>
-                  supabase/policy_variant_revisions.sql
-                </code>{" "}
-                실행 (저장본 변경 기록)
-              </li>
-              <li>
-                <code className={styles.codeInline}>
-                  supabase/policy_put_snapshots.sql
-                </code>{" "}
-                실행 (카페24 PUT 반영 스냅샷)
-              </li>
-              <li>
-                Supabase <strong>Project Settings → Data API → Exposed schemas</strong>
-                에 <code className={styles.codeInline}>policy</code> 추가
-              </li>
-              <li>저장 후 「저장본 목록 새로고침」 다시 시도</li>
-            </ul>
-          </div>
-        ) : null}
-
-        <details className={styles.putHistoryDetails} open>
-          <summary className={styles.putHistorySummary}>
-            카페24 반영 기록 (PUT할 때마다)
-          </summary>
-          <div className={styles.putHistoryBody}>
-            <p className={styles.historyHint}>
-              카페24에 <strong>이용약관 PUT이 성공</strong>할 때마다, 그때
-              반영된 HTML이 여기에 남습니다. (저장본을 고쳤다가 PUT한 것과
-              별개로, &quot;실제로 몰에 올라간 내용&quot; 기준입니다.)
-            </p>
-            {putHistoryError ? (
-              <p className={styles.msgErr}>{putHistoryError}</p>
-            ) : null}
-            <div className={styles.historyToolbar}>
-              <button
-                type="button"
-                className={styles.btnSecondary}
-                onClick={() => void loadPutSnapshots()}
-                disabled={putHistoryLoading}
-              >
-                새로고침
-              </button>
-            </div>
-            {putHistoryLoading && putSnapshots.length === 0 ? (
-              <p className={styles.meta}>불러오는 중…</p>
-            ) : putSnapshots.length === 0 ? (
-              <p className={styles.meta}>아직 반영 기록이 없습니다.</p>
-            ) : (
-              <div className={styles.historyTableWrap}>
-                <table className={styles.historyTable}>
-                  <thead>
-                    <tr>
-                      <th>시각</th>
-                      <th>shop</th>
-                      <th>참고 저장본</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {putSnapshots.map((s) => (
-                      <Fragment key={s.id}>
-                        <tr>
-                          <td className={styles.historyCellTime}>
-                            {new Date(s.created_at).toLocaleString("ko-KR")}
-                          </td>
-                          <td>{s.shop_no}</td>
-                          <td className={styles.historyCellLabel}>
-                            {s.variant_label ?? "—"}
-                            {s.variant_id ? (
-                              <span className={styles.meta}>
-                                {" "}
-                                ({s.variant_id.slice(0, 8)}…)
-                              </span>
-                            ) : null}
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className={styles.btnSecondary}
-                              onClick={() =>
-                                setExpandedPutId((cur) =>
-                                  cur === s.id ? null : s.id
-                                )
-                              }
-                            >
-                              {expandedPutId === s.id ? "접기" : "본문"}
-                            </button>
-                          </td>
-                        </tr>
-                        {expandedPutId === s.id ? (
-                          <tr className={styles.historyBodyRow}>
-                            <td colSpan={4}>
-                              <div
-                                className={styles.htmlPreviewLg}
-                                dangerouslySetInnerHTML={{
-                                  __html: s.terms_body || "<p>(비어 있음)</p>",
-                                }}
-                              />
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </details>
+        </div>
+        <button
+          type="button"
+          className={styles.btnSecondary}
+          onClick={() => setActiveTab("reflect")}
+        >
+          카페24 반영 탭
+        </button>
+      </div>
 
         <details className={styles.historyDetails}>
           <summary className={styles.historySummary}>
@@ -821,8 +787,9 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
               <p className={styles.historyHint}>
                 이 앱 DB에 있는 <strong>저장본(variant)</strong>이 바뀔 때의
                 기록입니다. &quot;수정 직전&quot;은 저장하기{" "}
-                <strong>이전</strong> 스냅샷입니다. (위의「카페24 반영 기록」과
-                용도가 다릅니다.)
+                <strong>이전</strong> 스냅샷입니다. (카페24에 실제로 올라간
+                반영 이력은「카페24 반영」탭의 반영 이력 새 창과 용도가
+                다릅니다.)
               </p>
               {historyError ? (
                 <p className={styles.msgErr}>{historyError}</p>
@@ -969,9 +936,10 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
                       setTermsDraft(v.body);
                       setPickTermsId(v.id);
                       setTermsRichEditorOpen(false);
+                      setActiveTab("reflect");
                     }}
                   >
-                    미리보기로
+                    반영 탭 미리보기로
                   </button>
                   <button
                     type="button"
@@ -1025,7 +993,8 @@ export function PolicyWorkspace({ mallId }: { mallId: string }) {
             </button>
           </div>
         </section>
-      </div>
+    </div>
+      )}
     </div>
   );
 }

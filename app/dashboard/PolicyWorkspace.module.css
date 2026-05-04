@@ -1,4 +1,85 @@
 /* 토스 느낌: 넉넉한 여백, 명확한 위계, 블루 포인트, 부드러운 카드 */
+
+.workspaceRoot {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.tabBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding: 0.25rem;
+  background: var(--toss-bg);
+  border-radius: var(--toss-radius-md);
+  border: 1px solid var(--toss-border);
+}
+
+.tabButton {
+  padding: 0.55rem 1rem;
+  border-radius: var(--toss-radius-sm);
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  background: transparent;
+  color: var(--toss-sub);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.tabButton:hover {
+  background: rgb(255 255 255 / 0.7);
+  color: var(--toss-text);
+}
+
+.tabButtonActive {
+  background: var(--toss-surface);
+  color: var(--toss-text);
+  box-shadow: var(--toss-shadow-sm);
+}
+
+.variantsLayout {
+  max-width: 1120px;
+  margin: 0 auto;
+  background: var(--toss-surface);
+  border-radius: var(--toss-radius-lg);
+  box-shadow: var(--toss-shadow);
+  padding: 1.5rem 1.5rem 2rem;
+  border: 1px solid var(--toss-border);
+  color: var(--toss-text);
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+}
+
+.variantsTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.variantsHeading {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--toss-text);
+}
+
+.variantsLead {
+  margin: 0.25rem 0 0;
+  font-size: 14px;
+  color: var(--toss-muted);
+  font-weight: 500;
+}
+
 .layout {
   --toss-bg: #f2f4f6;
   --toss-surface: #ffffff;
@@ -221,6 +302,29 @@
   border: 1px solid transparent;
 }
 
+.hintLink {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--toss-blue);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.hintLink:hover {
+  color: var(--toss-blue-hover);
+}
+
+.sidebarHistoryBtn {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
 .stepsPanel {
   margin-bottom: 1.25rem;
   padding: 1rem 1.15rem;
@@ -392,7 +496,6 @@
   border-radius: 4px;
 }
 
-.putHistoryDetails,
 .historyDetails {
   margin-bottom: 1rem;
   border: 1px solid var(--toss-border);
@@ -401,12 +504,6 @@
   padding: 0.35rem 0.85rem;
 }
 
-.putHistoryDetails {
-  border-color: #c5d9ff;
-  background: #f5f8ff;
-}
-
-.putHistorySummary,
 .historySummary {
   cursor: pointer;
   font-weight: 700;
@@ -417,12 +514,10 @@
   list-style: none;
 }
 
-.putHistorySummary::-webkit-details-marker,
 .historySummary::-webkit-details-marker {
   display: none;
 }
 
-.putHistoryBody,
 .historyDetailsBody {
   padding: 0.15rem 0 0.65rem;
 }

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getServerSession } from "@/lib/auth/server-session";
 import { Noto_Sans_KR } from "next/font/google";
 import { PolicyWorkspace } from "./PolicyWorkspace";
@@ -8,6 +9,28 @@ const dashboardSans = Noto_Sans_KR({
   weight: ["400", "500", "600", "700"],
   display: "swap",
 });
+
+function DashboardPolicyFallback({
+  className,
+}: {
+  className?: string;
+}) {
+  return (
+    <div
+      className={`${styles.shell} ${className ?? ""}`.trim()}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "40vh",
+        color: "#4e5968",
+        fontSize: "15px",
+      }}
+    >
+      대시보드 불러오는 중…
+    </div>
+  );
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -29,7 +52,11 @@ export default async function DashboardPage({
           </p>
         </div>
       ) : (
-        <PolicyWorkspace key={mallId} mallId={mallId} />
+        <Suspense
+          fallback={<DashboardPolicyFallback className={dashboardSans.className} />}
+        >
+          <PolicyWorkspace key={mallId} mallId={mallId} />
+        </Suspense>
       )}
     </div>
   );
