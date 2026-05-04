@@ -7,12 +7,26 @@ import {
   getLiveSlotBody,
   mergeLiveWithResolvedBodies,
 } from "@/lib/policy/mapCafe24";
+import { logger } from "@/lib/utils/logger";
 import {
   MANAGED_POLICY_SLOT,
   POLICY_SLOTS,
   type PolicySlot,
   type PolicySlotPicks,
+  type PolicyRequestBody,
 } from "@/types/policyPreset";
+
+function summarizePolicyPut(rb: PolicyRequestBody) {
+  return {
+    use_privacy_join: rb.use_privacy_join,
+    use_withdrawal: rb.use_withdrawal,
+    required_withdrawal: rb.required_withdrawal,
+    len_privacy_all: (rb.privacy_all ?? "").length,
+    len_terms_using_mall: (rb.terms_using_mall ?? "").length,
+    len_privacy_join: (rb.privacy_join ?? "").length,
+    len_withdrawal: (rb.withdrawal ?? "").length,
+  };
+}
 
 /** Vercel에서 카페24 왕복이 길 때 기본 타임아웃 방지 (플랜별 상한은 Vercel 정책 따름) */
 export const maxDuration = 60;
@@ -140,8 +154,20 @@ export async function PUT(req: NextRequest) {
     }
 
     const requestBody = mergeLiveWithResolvedBodies(live, resolved);
+    logger.info("admin/policy PUT 시도", {
+      mall_id,
+      shop_no,
+      ...summarizePolicyPut(requestBody),
+    });
     const result = await putCafe24Policy(mall_id!, token, shop_no, requestBody);
     if (!result.ok) {
+      logger.warn("admin/policy PUT 실패", {
+        mall_id,
+        shop_no,
+        status: result.status,
+        ...summarizePolicyPut(requestBody),
+        cafe24: result.body,
+      });
       return NextResponse.json(
         {
           error: "Cafe24 policy update failed",
@@ -155,7 +181,9 @@ export async function PUT(req: NextRequest) {
                 ? "약관 수정(쓰기) 권한이 없을 수 있습니다. mall.write_application 등 쓰기 스코프·앱 권한을 확인하세요."
                 : result.status === 400
                   ? "요청 본문 검증 실패일 수 있습니다. 카페24 에러 메시지(cafe24)를 확인하세요."
-                  : "카페24 admin/policy PUT 응답을 확인하세요.",
+                  : result.status === 422
+                    ? "플래그·HTML 조합 검증 실패. 서버 로그에 PUT 직전 플래그·본문 길이가 남습니다. 카페24 관리자에서 청약철회/가입 개인정보 사용 여부와 맞는지 확인하세요."
+                    : "카페24 admin/policy PUT 응답을 확인하세요.",
         },
         { status: 502 }
       );
