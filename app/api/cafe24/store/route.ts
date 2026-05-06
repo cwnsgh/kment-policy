@@ -32,9 +32,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const shop_no = Number(req.nextUrl.searchParams.get("shop_no")) || 1;
+
   const res = await callCafe24Api({
     mallId: mall_id,
-    endpoint: "admin/store?shop_no=1",
+    endpoint: `admin/store?shop_no=${shop_no}`,
     method: "GET",
     accessToken: token,
   });

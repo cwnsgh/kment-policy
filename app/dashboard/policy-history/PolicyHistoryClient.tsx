@@ -5,9 +5,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { PolicyPutSnapshotRow } from "@/types/policyPreset";
 import styles from "./policy-history.module.css";
 
+function shopNameFromStoreApiBody(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const root = data as Record<string, unknown>;
+  const wrap = root.store;
+  if (wrap && typeof wrap === "object") {
+    const n = (wrap as Record<string, unknown>).shop_name;
+    return typeof n === "string" && n.trim() ? n.trim() : null;
+  }
+  const n = root.shop_name;
+  return typeof n === "string" && n.trim() ? n.trim() : null;
+}
+
 function formatSelectLabel(
   s: PolicyPutSnapshotRow,
-  index: number
+  index: number,
+  shopDisplayName: string | null
 ): string {
   const d = new Date(s.created_at);
   const y = d.getFullYear();
@@ -16,7 +29,10 @@ function formatSelectLabel(
   const h = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
   const recent = index === 0 ? " · 가장 최근 반영" : "";
-  return `${y}-${m}-${day} ${h}:${min} 반영 (shop ${s.shop_no})${recent}`;
+  const shopPart = shopDisplayName
+    ? `${shopDisplayName} (shop ${s.shop_no})`
+    : `shop ${s.shop_no}`;
+  return `${y}-${m}-${day} ${h}:${min} 반영 · ${shopPart}${recent}`;
 }
 
 function formatEffectiveLine(s: PolicyPutSnapshotRow): string {
@@ -39,6 +55,7 @@ export function PolicyHistoryClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [shopDisplayName, setShopDisplayName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!mallId) {
@@ -73,6 +90,34 @@ export function PolicyHistoryClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!mallId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = new URLSearchParams({
+          mall_id: mallId,
+          shop_no: String(shopNo),
+        });
+        const res = await fetch(`/api/cafe24/store?${p}`, {
+          credentials: "include",
+        });
+        const data = (await res.json()) as unknown;
+        if (cancelled) return;
+        if (!res.ok) {
+          setShopDisplayName(null);
+          return;
+        }
+        setShopDisplayName(shopNameFromStoreApiBody(data));
+      } catch {
+        if (!cancelled) setShopDisplayName(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mallId, shopNo]);
 
   const selected = snapshots[selectedIndex] ?? null;
   const beforeHtml = useMemo(() => {
@@ -116,6 +161,11 @@ export function PolicyHistoryClient() {
     <div className={styles.shell}>
       <div className={styles.panel}>
         <h1 className={styles.title}>쇼핑몰 이용약관 반영 이력</h1>
+        <p className={styles.shopMeta}>
+          {shopDisplayName
+            ? `${shopDisplayName} · shop ${shopNo}`
+            : `shop ${shopNo}`}
+        </p>
         <p className={styles.lead}>
           카페24에 PUT으로 반영될 때마다 저장된 스냅샷입니다. 항목을 고르면{" "}
           <strong>그 반영 직전</strong>에 게시되어 있던 HTML과,{" "}
@@ -141,7 +191,7 @@ export function PolicyHistoryClient() {
                 >
                   {snapshots.map((s, i) => (
                     <option key={s.id} value={i}>
-                      {formatSelectLabel(s, i)}
+                      {formatSelectLabel(s, i, shopDisplayName)}
                     </option>
                   ))}
                 </select>

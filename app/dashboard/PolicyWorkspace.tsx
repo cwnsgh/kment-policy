@@ -28,6 +28,19 @@ function openPolicyPutHistoryWindow(mallId: string, shopNo: number) {
   window.open(`${u.pathname}${u.search}`, "_blank", "width=1040,height=880");
 }
 
+/** 카페24 `admin/store` GET 응답(JSON)에서 표시용 쇼핑몰 이름 */
+function shopNameFromStoreApiBody(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const root = data as Record<string, unknown>;
+  const wrap = root.store;
+  if (wrap && typeof wrap === "object") {
+    const n = (wrap as Record<string, unknown>).shop_name;
+    return typeof n === "string" && n.trim() ? n.trim() : null;
+  }
+  const n = root.shop_name;
+  return typeof n === "string" && n.trim() ? n.trim() : null;
+}
+
 function policyBodyLen(s: unknown): number {
   return typeof s === "string" ? s.length : 0;
 }
@@ -119,6 +132,7 @@ export function PolicyWorkspace({
   const [pickTermsId, setPickTermsId] = useState("");
   const [newRow, setNewRow] = useState({ label: "", body: "" });
   const [shopNo, setShopNo] = useState(1);
+  const [shopDisplayName, setShopDisplayName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [variantsRefreshing, setVariantsRefreshing] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
@@ -144,6 +158,33 @@ export function PolicyWorkspace({
   useEffect(() => {
     setActiveTabState(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = new URLSearchParams({
+          mall_id: mallId,
+          shop_no: String(shopNo),
+        });
+        const res = await fetch(`/api/cafe24/store?${p}`, {
+          credentials: "include",
+        });
+        const data = (await res.json()) as unknown;
+        if (cancelled) return;
+        if (!res.ok) {
+          setShopDisplayName(null);
+          return;
+        }
+        setShopDisplayName(shopNameFromStoreApiBody(data));
+      } catch {
+        if (!cancelled) setShopDisplayName(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mallId, shopNo]);
 
   const setActiveTab = useCallback(
     (tab: "reflect" | "save") => {
@@ -595,15 +636,27 @@ export function PolicyWorkspace({
         <p className={styles.sidebarTitle}>카페24 반영</p>
         <p className={styles.meta}>
           반영되는 HTML은 메인 영역 <strong>미리보기·편집기</strong> 기준입니다.
-          저장본을 고르면 내용이 바뀌고, PUT 시 반영 기록에 참고 라벨만 남을 수
-          있어요.
+          저장본은 선택 사항이며, 「카페24에서 불러오기」만으로도 바로 수정·반영할
+          수 있어요. 저장본을 고르면 내용이 바뀌고, PUT 기록에는 참고 라벨이 남을
+          수 있습니다.
         </p>
-        <div className={styles.field}>
-          <label className={styles.label}>shop_no</label>
+        <div className={styles.shopBlock}>
+          <label className={styles.label}>쇼핑몰</label>
+          {shopDisplayName ? (
+            <p className={styles.shopNameTitle}>{shopDisplayName}</p>
+          ) : (
+            <p className={styles.shopNamePlaceholder}>
+              이름을 불러오지 못했습니다. 아래 번호로 구분합니다.
+            </p>
+          )}
+          <p className={styles.fieldHelp}>
+            멀티쇼핑몰이면 shop 번호를 바꿉니다. 단일 쇼핑몰이면 1을 유지하세요.
+          </p>
           <input
             className={styles.input}
             type="number"
             min={1}
+            aria-label="shop 번호"
             value={shopNo}
             onChange={(e) => setShopNo(Number(e.target.value) || 1)}
           />
@@ -655,8 +708,33 @@ export function PolicyWorkspace({
           {SLOT_LABELS[MANAGED_POLICY_SLOT]}
         </h2>
         <p className={styles.subheading}>
-          {mallId} · 카페24에서 가져와 확인한 뒤, 필요할 때만 편집하고 반영하세요
+          {mallId}
+          {shopDisplayName ? ` · ${shopDisplayName}` : ""}
+          {` · shop ${shopNo}`} — 카페24에서 불러와 확인한 뒤, 필요할 때만 편집하고
+          반영하세요
         </p>
+
+        <section className={styles.flowGuide} aria-label="작업 방법 안내">
+          <h3 className={styles.flowGuideTitle}>어떻게 쓰면 되나요?</h3>
+          <p className={styles.flowGuideLead}>
+            <strong>저장본은 필수가 아닙니다.</strong> 카페24에 게시 중인 약관을
+            그대로 불러와 고친 뒤 바로 반영할 수 있습니다.
+          </p>
+          <ul className={styles.flowGuideList}>
+            <li>
+              <strong>빠른 수정:</strong> 「카페24에서 불러오기」→ 미리보기 확인 →
+              필요 시 「편집하기」→ 「카페24에 반영하기」
+            </li>
+            <li>
+              <strong>저장본 쓰기:</strong> 왼쪽 「저장본 불러오기」에서 문구를
+              고르면 미리보기에 넣어 줍니다. 이후 편집·반영하면 됩니다.
+            </li>
+            <li>
+              <strong>버전 보관:</strong> 「저장본 관리」 탭에서 새로 저장하거나,
+              편집 후 「이 내용 → 저장본에 추가」를 이용하세요.
+            </li>
+          </ul>
+        </section>
 
         <section className={styles.stepsPanel} aria-label="빠른 안내">
           <p className={styles.stepsLead}>
@@ -697,8 +775,12 @@ export function PolicyWorkspace({
         <section className={styles.previewCard} aria-label="이용약관 미리보기">
           <div className={styles.cardHeader}>
             <h3 className={styles.cardTitle}>미리보기</h3>
-            {livePolicy ? (
-              <span className={styles.badge}>shop {livePolicy.shop_no}</span>
+            {livePolicy || termsDraft.trim() ? (
+              <span className={styles.badge}>
+                {shopDisplayName
+                  ? `${shopDisplayName} · shop ${livePolicy?.shop_no ?? shopNo}`
+                  : `shop ${livePolicy?.shop_no ?? shopNo}`}
+              </span>
             ) : null}
           </div>
           {livePolicy || termsDraft.trim() ? (

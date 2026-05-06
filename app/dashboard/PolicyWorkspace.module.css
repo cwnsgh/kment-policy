@@ -146,6 +146,77 @@
   margin: 0 0 1rem;
 }
 
+.shopBlock {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--toss-bg);
+  border-radius: var(--toss-radius-sm);
+  border: 1px solid var(--toss-border);
+}
+
+.shopNameTitle {
+  margin: 0 0 0.45rem;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--toss-text);
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.shopNamePlaceholder {
+  margin: 0 0 0.45rem;
+  font-size: 13px;
+  color: var(--toss-muted);
+  line-height: 1.45;
+}
+
+.fieldHelp {
+  margin: 0 0 0.5rem;
+  font-size: 12px;
+  color: var(--toss-muted);
+  line-height: 1.45;
+}
+
+.flowGuide {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.15rem;
+  background: var(--toss-surface);
+  border: 1px solid var(--toss-border);
+  border-radius: var(--toss-radius-md);
+  box-shadow: var(--toss-shadow-sm);
+}
+
+.flowGuideTitle {
+  margin: 0 0 0.5rem;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--toss-text);
+}
+
+.flowGuideLead {
+  margin: 0 0 0.65rem;
+  font-size: 14px;
+  color: var(--toss-sub);
+  line-height: 1.55;
+}
+
+.flowGuideList {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 14px;
+  color: var(--toss-sub);
+  line-height: 1.65;
+}
+
+.flowGuideList li {
+  margin-bottom: 0.35rem;
+}
+
+.flowGuideList li:last-child {
+  margin-bottom: 0;
+}
+
 .field {
   margin-bottom: 1rem;
 }
