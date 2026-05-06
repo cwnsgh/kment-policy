@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PolicyPutSnapshotRow } from "@/types/policyPreset";
+import type { Cafe24ShopListItem } from "@/types/cafe24Shop";
 import styles from "./policy-history.module.css";
 
 function shopNameFromStoreApiBody(data: unknown): string | null {
@@ -17,11 +18,15 @@ function shopNameFromStoreApiBody(data: unknown): string | null {
   return typeof n === "string" && n.trim() ? n.trim() : null;
 }
 
-function formatSelectLabel(
-  s: PolicyPutSnapshotRow,
-  index: number,
-  shopDisplayName: string | null
-): string {
+function formatShopOptionLabel(s: Cafe24ShopListItem): string {
+  const parts = [s.shop_name];
+  if (s.language_name) parts.push(s.language_name);
+  if (s.default_shop) parts.push("기본");
+  if (!s.active) parts.push("비활성");
+  return parts.join(" · ");
+}
+
+function formatSelectLabel(s: PolicyPutSnapshotRow, index: number): string {
   const d = new Date(s.created_at);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -29,10 +34,7 @@ function formatSelectLabel(
   const h = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
   const recent = index === 0 ? " · 가장 최근 반영" : "";
-  const shopPart = shopDisplayName
-    ? `${shopDisplayName} (shop ${s.shop_no})`
-    : `shop ${s.shop_no}`;
-  return `${y}-${m}-${day} ${h}:${min} 반영 · ${shopPart}${recent}`;
+  return `${y}-${m}-${day} ${h}:${min} 반영${recent}`;
 }
 
 function formatEffectiveLine(s: PolicyPutSnapshotRow): string {
@@ -47,6 +49,7 @@ function formatEffectiveLine(s: PolicyPutSnapshotRow): string {
 
 export function PolicyHistoryClient() {
   const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
   const mallId = sp.get("mall_id")?.trim() ?? "";
   const shopNo = Number(sp.get("shop_no")) || 1;
@@ -55,6 +58,7 @@ export function PolicyHistoryClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [shopList, setShopList] = useState<Cafe24ShopListItem[] | null>(null);
   const [shopDisplayName, setShopDisplayName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -94,6 +98,47 @@ export function PolicyHistoryClient() {
   useEffect(() => {
     if (!mallId) return;
     let cancelled = false;
+    setShopList(null);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/cafe24/shops?mall_id=${encodeURIComponent(mallId)}`,
+          { credentials: "include" }
+        );
+        const data = (await res.json()) as { shops?: Cafe24ShopListItem[] };
+        if (cancelled) return;
+        if (!res.ok) {
+          setShopList([]);
+          return;
+        }
+        setShopList(Array.isArray(data.shops) ? data.shops : []);
+      } catch {
+        if (!cancelled) setShopList([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mallId]);
+
+  useEffect(() => {
+    if (!shopList || shopList.length === 0) return;
+    if (shopList.some((s) => s.shop_no === shopNo)) return;
+    const def = shopList.find((s) => s.default_shop) ?? shopList[0];
+    const p = new URLSearchParams();
+    p.set("mall_id", mallId);
+    p.set("shop_no", String(def.shop_no));
+    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+  }, [shopList, shopNo, mallId, pathname, router]);
+
+  useEffect(() => {
+    if (shopList === null) return;
+    if (shopList.length > 0) {
+      setShopDisplayName(null);
+      return;
+    }
+    if (!mallId) return;
+    let cancelled = false;
     (async () => {
       try {
         const p = new URLSearchParams({
@@ -117,7 +162,23 @@ export function PolicyHistoryClient() {
     return () => {
       cancelled = true;
     };
-  }, [mallId, shopNo]);
+  }, [mallId, shopNo, shopList]);
+
+  const headerShopLabel = useMemo(() => {
+    const row = shopList?.find((s) => s.shop_no === shopNo);
+    if (row?.shop_name) return row.shop_name;
+    return shopDisplayName;
+  }, [shopList, shopNo, shopDisplayName]);
+
+  const changeHistoryShop = useCallback(
+    (nextShopNo: number) => {
+      const p = new URLSearchParams();
+      p.set("mall_id", mallId);
+      p.set("shop_no", String(nextShopNo));
+      router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    },
+    [mallId, pathname, router]
+  );
 
   const selected = snapshots[selectedIndex] ?? null;
   const beforeHtml = useMemo(() => {
@@ -162,10 +223,29 @@ export function PolicyHistoryClient() {
       <div className={styles.panel}>
         <h1 className={styles.title}>쇼핑몰 이용약관 반영 이력</h1>
         <p className={styles.shopMeta}>
-          {shopDisplayName
-            ? `${shopDisplayName} · shop ${shopNo}`
-            : `shop ${shopNo}`}
+          {headerShopLabel ?? "쇼핑몰 정보를 불러오는 중…"}
         </p>
+        {shopList && shopList.length > 1 ? (
+          <div className={styles.shopPickerBar}>
+            <label className={styles.shopPickerLabel} htmlFor="hist-shop">
+              다른 쇼핑몰 이력 보기
+            </label>
+            <select
+              id="hist-shop"
+              className={styles.shopPickerSelect}
+              value={String(shopNo)}
+              onChange={(e) =>
+                changeHistoryShop(Number(e.target.value) || 1)
+              }
+            >
+              {shopList.map((s) => (
+                <option key={s.shop_no} value={s.shop_no}>
+                  {formatShopOptionLabel(s)}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <p className={styles.lead}>
           카페24에 PUT으로 반영될 때마다 저장된 스냅샷입니다. 항목을 고르면{" "}
           <strong>그 반영 직전</strong>에 게시되어 있던 HTML과,{" "}
@@ -191,7 +271,7 @@ export function PolicyHistoryClient() {
                 >
                   {snapshots.map((s, i) => (
                     <option key={s.id} value={i}>
-                      {formatSelectLabel(s, i, shopDisplayName)}
+                      {formatSelectLabel(s, i)}
                     </option>
                   ))}
                 </select>

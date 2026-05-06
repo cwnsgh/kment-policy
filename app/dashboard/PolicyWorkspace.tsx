@@ -16,6 +16,7 @@ import {
   type VariantRevisionRow,
 } from "@/types/policyPreset";
 import type { Cafe24PolicyPayload } from "@/lib/api/cafe24Policy";
+import type { Cafe24ShopListItem } from "@/types/cafe24Shop";
 import { PolicyRichEditor } from "./PolicyRichEditor";
 import styles from "./PolicyWorkspace.module.css";
 
@@ -39,6 +40,14 @@ function shopNameFromStoreApiBody(data: unknown): string | null {
   }
   const n = root.shop_name;
   return typeof n === "string" && n.trim() ? n.trim() : null;
+}
+
+function formatShopOptionLabel(s: Cafe24ShopListItem): string {
+  const parts = [s.shop_name];
+  if (s.language_name) parts.push(s.language_name);
+  if (s.default_shop) parts.push("기본");
+  if (!s.active) parts.push("비활성");
+  return parts.join(" · ");
 }
 
 function policyBodyLen(s: unknown): number {
@@ -132,6 +141,8 @@ export function PolicyWorkspace({
   const [pickTermsId, setPickTermsId] = useState("");
   const [newRow, setNewRow] = useState({ label: "", body: "" });
   const [shopNo, setShopNo] = useState(1);
+  const [shopList, setShopList] = useState<Cafe24ShopListItem[] | null>(null);
+  const [shopsLoadError, setShopsLoadError] = useState<string | null>(null);
   const [shopDisplayName, setShopDisplayName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [variantsRefreshing, setVariantsRefreshing] = useState(false);
@@ -161,6 +172,58 @@ export function PolicyWorkspace({
 
   useEffect(() => {
     let cancelled = false;
+    setShopList(null);
+    setShopsLoadError(null);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/cafe24/shops?mall_id=${encodeURIComponent(mallId)}`,
+          { credentials: "include" }
+        );
+        const data = (await res.json()) as {
+          error?: string;
+          shops?: Cafe24ShopListItem[];
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          setShopList([]);
+          setShopsLoadError(
+            typeof data.error === "string"
+              ? data.error
+              : "쇼핑몰 목록을 불러오지 못했습니다."
+          );
+          return;
+        }
+        setShopList(Array.isArray(data.shops) ? data.shops : []);
+      } catch (e) {
+        if (!cancelled) {
+          setShopList([]);
+          setShopsLoadError(
+            e instanceof Error ? e.message : "쇼핑몰 목록 오류"
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mallId]);
+
+  useEffect(() => {
+    if (!shopList || shopList.length === 0) return;
+    if (shopList.some((s) => s.shop_no === shopNo)) return;
+    const def = shopList.find((s) => s.default_shop) ?? shopList[0];
+    setShopNo(def.shop_no);
+  }, [shopList, shopNo]);
+
+  /** 목록 API가 없을 때만 `admin/store`로 이름 보조 */
+  useEffect(() => {
+    if (shopList === null) return;
+    if (shopList.length > 0) {
+      setShopDisplayName(null);
+      return;
+    }
+    let cancelled = false;
     (async () => {
       try {
         const p = new URLSearchParams({
@@ -184,7 +247,14 @@ export function PolicyWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [mallId, shopNo]);
+  }, [mallId, shopNo, shopList]);
+
+  const primaryShopLabel = useMemo(() => {
+    const row = shopList?.find((s) => s.shop_no === shopNo);
+    if (row?.shop_name) return row.shop_name;
+    if (shopDisplayName) return shopDisplayName;
+    return null;
+  }, [shopList, shopNo, shopDisplayName]);
 
   const setActiveTab = useCallback(
     (tab: "reflect" | "save") => {
@@ -641,25 +711,60 @@ export function PolicyWorkspace({
           수 있습니다.
         </p>
         <div className={styles.shopBlock}>
-          <label className={styles.label}>쇼핑몰</label>
-          {shopDisplayName ? (
-            <p className={styles.shopNameTitle}>{shopDisplayName}</p>
-          ) : (
+          <label className={styles.label}>반영할 쇼핑몰</label>
+          {shopList === null ? (
             <p className={styles.shopNamePlaceholder}>
-              이름을 불러오지 못했습니다. 아래 번호로 구분합니다.
+              카페24에 등록된 쇼핑몰 목록을 불러오는 중입니다…
             </p>
+          ) : shopList.length > 0 ? (
+            <>
+              <select
+                className={styles.select}
+                value={String(shopNo)}
+                onChange={(e) =>
+                  setShopNo(Number(e.target.value) || 1)
+                }
+                aria-label="반영할 쇼핑몰 선택"
+              >
+                {shopList.map((s) => (
+                  <option key={s.shop_no} value={s.shop_no}>
+                    {formatShopOptionLabel(s)}
+                  </option>
+                ))}
+              </select>
+              <p className={styles.fieldHelp}>
+                카페24 멀티쇼핑몰(언어·통화별 몰)은 이름·언어로 구분됩니다. 번호를
+                외울 필요 없습니다.
+              </p>
+            </>
+          ) : (
+            <>
+              {shopsLoadError ? (
+                <p className={styles.shopListError}>{shopsLoadError}</p>
+              ) : null}
+              <p className={styles.shopNamePlaceholder}>
+                목록을 가져오지 못했습니다. 카페24 관리자에서 확인한 값이 있으면
+                아래에 입력해 주세요.
+              </p>
+              <input
+                className={styles.input}
+                type="number"
+                min={1}
+                aria-label="shop 번호(수동)"
+                value={shopNo}
+                onChange={(e) => setShopNo(Number(e.target.value) || 1)}
+              />
+              {primaryShopLabel ? (
+                <p className={styles.fieldHelp}>
+                  현재 조회 이름: {primaryShopLabel} (내부 번호 {shopNo})
+                </p>
+              ) : (
+                <p className={styles.fieldHelp}>
+                  내부 구분 번호(shop_no): {shopNo}
+                </p>
+              )}
+            </>
           )}
-          <p className={styles.fieldHelp}>
-            멀티쇼핑몰이면 shop 번호를 바꿉니다. 단일 쇼핑몰이면 1을 유지하세요.
-          </p>
-          <input
-            className={styles.input}
-            type="number"
-            min={1}
-            aria-label="shop 번호"
-            value={shopNo}
-            onChange={(e) => setShopNo(Number(e.target.value) || 1)}
-          />
         </div>
         <div className={styles.field}>
           <label className={styles.label}>저장본 불러오기</label>
@@ -709,9 +814,9 @@ export function PolicyWorkspace({
         </h2>
         <p className={styles.subheading}>
           {mallId}
-          {shopDisplayName ? ` · ${shopDisplayName}` : ""}
-          {` · shop ${shopNo}`} — 카페24에서 불러와 확인한 뒤, 필요할 때만 편집하고
-          반영하세요
+          {primaryShopLabel ? ` · ${primaryShopLabel}` : ""}
+          {" — "}
+          카페24에서 불러와 확인한 뒤, 필요할 때만 편집하고 반영하세요
         </p>
 
         <section className={styles.flowGuide} aria-label="작업 방법 안내">
@@ -777,9 +882,8 @@ export function PolicyWorkspace({
             <h3 className={styles.cardTitle}>미리보기</h3>
             {livePolicy || termsDraft.trim() ? (
               <span className={styles.badge}>
-                {shopDisplayName
-                  ? `${shopDisplayName} · shop ${livePolicy?.shop_no ?? shopNo}`
-                  : `shop ${livePolicy?.shop_no ?? shopNo}`}
+                {primaryShopLabel ??
+                  `내부 번호 ${livePolicy?.shop_no ?? shopNo}`}
               </span>
             ) : null}
           </div>

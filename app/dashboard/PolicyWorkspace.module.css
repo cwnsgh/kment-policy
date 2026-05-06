@@ -154,15 +154,6 @@
   border: 1px solid var(--toss-border);
 }
 
-.shopNameTitle {
-  margin: 0 0 0.45rem;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--toss-text);
-  letter-spacing: -0.02em;
-  line-height: 1.35;
-}
-
 .shopNamePlaceholder {
   margin: 0 0 0.45rem;
   font-size: 13px;
@@ -174,6 +165,14 @@
   margin: 0 0 0.5rem;
   font-size: 12px;
   color: var(--toss-muted);
+  line-height: 1.45;
+}
+
+.shopListError {
+  margin: 0 0 0.5rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b71c1c;
   line-height: 1.45;
 }
 

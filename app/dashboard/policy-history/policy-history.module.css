@@ -38,6 +38,42 @@
   background: #f9fafb;
 }
 
+.shopPickerBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0;
+  padding: 0.65rem 1.5rem;
+  border-bottom: 1px solid #e5e8eb;
+  background: #fff;
+}
+
+.shopPickerLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4e5968;
+  white-space: nowrap;
+}
+
+.shopPickerSelect {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.65rem;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid #e5e8eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #191f28;
+}
+
+.shopPickerSelect:focus {
+  outline: none;
+  border-color: #3182f6;
+  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.15);
+}
+
 .metaGrid {
   display: grid;
   grid-template-columns: 140px 1fr;
