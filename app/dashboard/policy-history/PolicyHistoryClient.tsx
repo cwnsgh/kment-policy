@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PolicyPutSnapshotRow } from "@/types/policyPreset";
 import type { Cafe24ShopListItem } from "@/types/cafe24Shop";
+import { HtmlLineDiff } from "./HtmlLineDiff";
 import styles from "./policy-history.module.css";
 
 function shopNameFromStoreApiBody(data: unknown): string | null {
@@ -60,6 +61,7 @@ export function PolicyHistoryClient() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [shopList, setShopList] = useState<Cafe24ShopListItem[] | null>(null);
   const [shopDisplayName, setShopDisplayName] = useState<string | null>(null);
+  const [historyView, setHistoryView] = useState<"preview" | "diff">("preview");
 
   const load = useCallback(async () => {
     if (!mallId) {
@@ -247,9 +249,11 @@ export function PolicyHistoryClient() {
           </div>
         ) : null}
         <p className={styles.lead}>
-          카페24에 PUT으로 반영될 때마다 저장된 스냅샷입니다. 항목을 고르면{" "}
-          <strong>그 반영 직전</strong>에 게시되어 있던 HTML과,{" "}
-          <strong>그 반영으로 바뀐 뒤</strong> HTML을 나란히 볼 수 있습니다.
+          카페24에 PUT으로 반영될 때마다 저장된 스냅샷입니다. 항목을 고른 뒤{" "}
+          <strong>미리보기</strong>에서 렌더링 결과를 나란히 보거나,{" "}
+          <strong>변경 추적</strong>에서 VS Code처럼 추가(초록)·삭제(빨강) 줄 diff를
+          볼 수 있습니다. (diff는 저장된 HTML 태그·공백까지 포함한{" "}
+          <strong>원문</strong>을 줄 단위로 비교합니다.)
         </p>
 
         {error ? <p className={styles.msg}>{error}</p> : null}
@@ -289,37 +293,80 @@ export function PolicyHistoryClient() {
               </div>
             </div>
 
-            <div className={styles.compare}>
-              <div className={styles.pane}>
-                <p className={styles.paneTitle}>PUT 직전 (이전에 게시된 내용)</p>
-                {beforeHtml != null && beforeHtml.length > 0 ? (
-                  <div
-                    className={styles.htmlBox}
-                    dangerouslySetInnerHTML={{ __html: beforeHtml }}
-                  />
-                ) : (
-                  <p className={styles.emptyPane}>
-                    그보다 이전에 반영된 기록이 없습니다.
-                    <br />
-                    (이번이 첫 PUT이거나, 더 오래된 기록은 목록에 없을 수
-                    있습니다.)
-                  </p>
-                )}
-              </div>
-              <div className={styles.pane}>
-                <p className={`${styles.paneTitle} ${styles.paneTitleAfter}`}>
-                  이번 PUT 이후 (반영된 내용)
-                </p>
-                {afterHtml.trim() ? (
-                  <div
-                    className={styles.htmlBox}
-                    dangerouslySetInnerHTML={{ __html: afterHtml }}
-                  />
-                ) : (
-                  <p className={styles.emptyPane}>저장된 본문이 비어 있습니다.</p>
-                )}
-              </div>
+            <div className={styles.viewToggle} role="tablist" aria-label="보기 방식">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={historyView === "preview"}
+                className={
+                  historyView === "preview"
+                    ? `${styles.viewToggleBtn} ${styles.viewToggleBtnActive}`
+                    : styles.viewToggleBtn
+                }
+                onClick={() => setHistoryView("preview")}
+              >
+                미리보기 (나란히)
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={historyView === "diff"}
+                className={
+                  historyView === "diff"
+                    ? `${styles.viewToggleBtn} ${styles.viewToggleBtnActive}`
+                    : styles.viewToggleBtn
+                }
+                onClick={() => setHistoryView("diff")}
+              >
+                변경 추적 (diff)
+              </button>
             </div>
+
+            {historyView === "preview" ? (
+              <div className={styles.compare}>
+                <div className={styles.pane}>
+                  <p className={styles.paneTitle}>
+                    PUT 직전 (이전에 게시된 내용)
+                  </p>
+                  {beforeHtml != null && beforeHtml.length > 0 ? (
+                    <div
+                      className={styles.htmlBox}
+                      dangerouslySetInnerHTML={{ __html: beforeHtml }}
+                    />
+                  ) : (
+                    <p className={styles.emptyPane}>
+                      그보다 이전에 반영된 기록이 없습니다.
+                      <br />
+                      (이번이 첫 PUT이거나, 더 오래된 기록은 목록에 없을 수
+                      있습니다.)
+                    </p>
+                  )}
+                </div>
+                <div className={styles.pane}>
+                  <p className={`${styles.paneTitle} ${styles.paneTitleAfter}`}>
+                    이번 PUT 이후 (반영된 내용)
+                  </p>
+                  {afterHtml.trim() ? (
+                    <div
+                      className={styles.htmlBox}
+                      dangerouslySetInnerHTML={{ __html: afterHtml }}
+                    />
+                  ) : (
+                    <p className={styles.emptyPane}>
+                      저장된 본문이 비어 있습니다.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className={styles.diffLegend}>
+                  한 줄이 통째로 바뀌면 삭제(빨강) 다음에 추가(초록)로 보일 수
+                  있습니다. 태그·공백까지 비교합니다.
+                </p>
+                <HtmlLineDiff before={beforeHtml} after={afterHtml} />
+              </>
+            )}
           </>
         )}
 

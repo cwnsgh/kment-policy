@@ -246,3 +246,134 @@
   color: #6b7684;
   line-height: 1.5;
 }
+
+.viewToggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.65rem 1.5rem 0.75rem;
+  border-bottom: 1px solid #e5e8eb;
+  background: #fafbfc;
+}
+
+.viewToggleBtn {
+  padding: 0.45rem 0.85rem;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #4e5968;
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.viewToggleBtn:hover {
+  border-color: #c5cdd6;
+  color: #191f28;
+}
+
+.viewToggleBtnActive {
+  color: #191f28;
+  background: #e8f3ff;
+  border-color: #3182f6;
+  box-shadow: 0 0 0 1px rgba(49, 130, 246, 0.2);
+}
+
+.diffLegend {
+  margin: 0 0 0.65rem;
+  padding: 0 1.15rem;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7684;
+  line-height: 1.5;
+}
+
+.diffNoChange {
+  margin: 0 1.15rem 1rem;
+  padding: 1rem 1rem;
+  font-size: 14px;
+  color: #4e5968;
+  text-align: center;
+  background: #f9fafb;
+  border: 1px dashed #e5e8eb;
+  border-radius: 10px;
+}
+
+.diffRoot {
+  max-height: min(62vh, 560px);
+  overflow: auto;
+  margin: 0 1.15rem 1rem;
+  border: 1px solid #e5e8eb;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.diffInner {
+  font-family:
+    ui-monospace,
+    "Cascadia Code",
+    "Source Code Pro",
+    Menlo,
+    Consolas,
+    monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diffRowSame,
+.diffRowAdd,
+.diffRowDel {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin: 0;
+  padding: 0.08rem 0;
+  border-left: 3px solid transparent;
+}
+
+.diffRowSame {
+  background: transparent;
+  color: #24292f;
+}
+
+.diffRowAdd {
+  background: rgba(46, 160, 67, 0.2);
+  border-left-color: #2ea043;
+}
+
+.diffRowDel {
+  background: rgba(248, 81, 73, 0.18);
+  border-left-color: #cf222e;
+}
+
+.diffGutter {
+  flex: 0 0 1.35rem;
+  text-align: center;
+  font-weight: 700;
+  user-select: none;
+  color: #57606a;
+}
+
+.diffRowAdd .diffGutter {
+  color: #1a7f37;
+}
+
+.diffRowDel .diffGutter {
+  color: #cf222e;
+}
+
+.diffCode {
+  flex: 1;
+  margin: 0;
+  padding: 0 0.5rem 0 0;
+  font-family: inherit;
+  font-size: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: inherit;
+}
