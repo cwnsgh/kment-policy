@@ -29,6 +29,28 @@ function openPolicyPutHistoryWindow(mallId: string, shopNo: number) {
   window.open(`${u.pathname}${u.search}`, "_blank", "width=1040,height=880");
 }
 
+function isReinstallRequiredPayload(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  return (data as Record<string, unknown>).error === "reinstall_required";
+}
+
+function generateOAuthState(mallId: string): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  const randomHex = Array.from(array)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${mallId}:${randomHex}`;
+}
+
+/** 카페24 OAuth 재연동 — authorize가 state를 DB에 저장한 뒤 카페24로 리다이렉트 */
+function startCafe24OAuthReconnect(mallId: string) {
+  const state = generateOAuthState(mallId);
+  window.location.href = `/api/oauth/authorize?mall_id=${encodeURIComponent(
+    mallId
+  )}&state=${encodeURIComponent(state)}`;
+}
+
 /** 카페24 `admin/store` GET 응답(JSON)에서 표시용 쇼핑몰 이름 */
 function shopNameFromStoreApiBody(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
@@ -144,6 +166,7 @@ export function PolicyWorkspace({
   const [shopList, setShopList] = useState<Cafe24ShopListItem[] | null>(null);
   const [shopsLoadError, setShopsLoadError] = useState<string | null>(null);
   const [shopDisplayName, setShopDisplayName] = useState<string | null>(null);
+  const [cafe24ReconnectNeeded, setCafe24ReconnectNeeded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [variantsRefreshing, setVariantsRefreshing] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
@@ -170,6 +193,35 @@ export function PolicyWorkspace({
     setActiveTabState(initialTab);
   }, [initialTab]);
 
+  /** 토큰 만료·무효 시 배너 표시 (OAuth 후 돌아오면 mallId 기준으로 다시 검사) */
+  useEffect(() => {
+    let cancelled = false;
+    setCafe24ReconnectNeeded(false);
+    (async () => {
+      try {
+        const p = new URLSearchParams({
+          mall_id: mallId,
+          shop_no: "1",
+        });
+        const res = await fetch(`/api/cafe24/store?${p}`, {
+          credentials: "include",
+        });
+        const data = (await res.json()) as unknown;
+        if (cancelled) return;
+        if (res.status === 403 && isReinstallRequiredPayload(data)) {
+          setCafe24ReconnectNeeded(true);
+          return;
+        }
+        setCafe24ReconnectNeeded(false);
+      } catch {
+        if (!cancelled) setCafe24ReconnectNeeded(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mallId]);
+
   useEffect(() => {
     let cancelled = false;
     setShopList(null);
@@ -186,11 +238,16 @@ export function PolicyWorkspace({
         };
         if (cancelled) return;
         if (!res.ok) {
+          if (res.status === 403 && data.error === "reinstall_required") {
+            setCafe24ReconnectNeeded(true);
+          }
           setShopList([]);
           setShopsLoadError(
-            typeof data.error === "string"
-              ? data.error
-              : "쇼핑몰 목록을 불러오지 못했습니다."
+            data.error === "reinstall_required"
+              ? "카페24 앱 재연동이 필요합니다. 상단의 「카페24 다시 연결」을 눌러 주세요."
+              : typeof data.error === "string"
+                ? data.error
+                : "쇼핑몰 목록을 불러오지 못했습니다."
           );
           return;
         }
@@ -236,6 +293,9 @@ export function PolicyWorkspace({
         const data = (await res.json()) as unknown;
         if (cancelled) return;
         if (!res.ok) {
+          if (res.status === 403 && isReinstallRequiredPayload(data)) {
+            setCafe24ReconnectNeeded(true);
+          }
           setShopDisplayName(null);
           return;
         }
@@ -317,9 +377,13 @@ export function PolicyWorkspace({
           httpStatus: res.status,
           body: data,
         });
+        if (res.status === 403 && isReinstallRequiredPayload(data)) {
+          setCafe24ReconnectNeeded(true);
+        }
         throw new Error(formatPolicyApiError(data, res.statusText));
       }
       if (!data.policy) throw new Error("응답에 policy가 없습니다.");
+      setCafe24ReconnectNeeded(false);
       const policy = data.policy as Cafe24PolicyPayload;
       setLivePolicy(policy);
       setTermsDraft(slotBodyFromLive(policy));
@@ -613,9 +677,13 @@ export function PolicyWorkspace({
           httpStatus: res.status,
           body: data,
         });
+        if (res.status === 403 && isReinstallRequiredPayload(data)) {
+          setCafe24ReconnectNeeded(true);
+        }
         const base = formatPolicyApiError(data, res.statusText);
         throw new Error(base + extraHintForPutFailure(data));
       }
+      setCafe24ReconnectNeeded(false);
       console.log(
         `%c${LOG_PREFIX} Cafe24 PUT 성공 — 응답 policy`,
         "color:#047857;font-weight:bold",
@@ -643,6 +711,23 @@ export function PolicyWorkspace({
 
   return (
     <div className={styles.workspaceRoot}>
+      {cafe24ReconnectNeeded ? (
+        <div className={styles.oauthReconnectBanner} role="alert">
+          <p className={styles.oauthReconnectText}>
+            <strong>카페24 연결이 끊겼습니다.</strong> 액세스·리프레시 토큰이
+            만료되었거나 무효화된 상태입니다. 아래를 눌러 카페24에서 앱을 다시
+            승인하면 토큰이 재발급됩니다.
+          </p>
+          <button
+            type="button"
+            className={styles.oauthReconnectBtn}
+            onClick={() => startCafe24OAuthReconnect(mallId)}
+          >
+            카페24 다시 연결
+          </button>
+        </div>
+      ) : null}
+
       <nav className={styles.tabBar} aria-label="대시보드 탭">
         <button
           type="button"

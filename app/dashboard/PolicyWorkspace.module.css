@@ -23,6 +23,48 @@
   letter-spacing: -0.02em;
 }
 
+.oauthReconnectBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1.1rem;
+  background: linear-gradient(135deg, #fff8e6 0%, #fff3e0 100%);
+  border: 1px solid #ffc107;
+  border-radius: var(--toss-radius-md);
+  box-shadow: var(--toss-shadow-sm);
+}
+
+.oauthReconnectText {
+  margin: 0;
+  flex: 1;
+  min-width: min(100%, 220px);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--toss-sub);
+  line-height: 1.55;
+}
+
+.oauthReconnectBtn {
+  flex-shrink: 0;
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--toss-radius-sm);
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  background: var(--toss-blue);
+  color: #fff;
+  transition: background 0.15s ease;
+}
+
+.oauthReconnectBtn:hover {
+  background: var(--toss-blue-hover);
+}
+
 .tabBar {
   display: flex;
   flex-wrap: wrap;

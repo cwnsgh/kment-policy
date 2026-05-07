@@ -14,6 +14,18 @@ function shopsTable() {
   return supabaseAdmin.schema(POLICY_SCHEMA).from("shops");
 }
 
+/** 카페24/ OAuth가 refresh 실패 시 내는 오류 문자열 (형식이 환경마다 조금 다를 수 있음) */
+function isInvalidGrantError(err: string | undefined): boolean {
+  if (!err) return false;
+  const e = err.toLowerCase();
+  return (
+    e === "invalid_grant" ||
+    e.includes("invalid_grant") ||
+    e.includes("invalid refresh") ||
+    e.includes("token was revoked")
+  );
+}
+
 export async function ensureValidAccessToken(
   mall_id: string
 ): Promise<string | { reinstallRequired: true } | null> {
@@ -84,7 +96,7 @@ export async function ensureValidAccessToken(
           error: refreshResult.error,
         });
 
-        if (refreshResult.error === "invalid_grant") {
+        if (isInvalidGrantError(refreshResult.error)) {
           logger.error("refresh_token 만료/무효화, 재인증 필요", { mall_id });
           await handleTokenExpiration(actualMallIdStr);
           tokenCache.setRefreshFailed(mall_id);
@@ -182,14 +194,24 @@ async function refreshCafe24Token(
         : dateStr + "+09:00";
     };
 
+    const updateRow: Record<string, unknown> = {
+      access_token: tokenData.access_token,
+      expires_at: addTimezone(tokenData.expires_at),
+      updated_at: new Date().toISOString(),
+    };
+    // 응답에 refresh_token이 없을 때 기존 값을 null로 덮어쓰면 다음 갱신이 영구 실패함
+    if (
+      typeof tokenData.refresh_token === "string" &&
+      tokenData.refresh_token.length > 0
+    ) {
+      updateRow.refresh_token = tokenData.refresh_token;
+      updateRow.refresh_expires_at = addTimezone(
+        tokenData.refresh_token_expires_at
+      );
+    }
+
     const { error: updateError } = await shopsTable()
-      .update({
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        expires_at: addTimezone(tokenData.expires_at),
-        refresh_expires_at: addTimezone(tokenData.refresh_token_expires_at),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateRow)
       .eq("mall_id", mallId);
 
     if (updateError) {
